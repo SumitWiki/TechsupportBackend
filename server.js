@@ -1,37 +1,56 @@
 require("dotenv").config();
 const express     = require("express");
 const cors        = require("cors");
+const helmet      = require("helmet");
 const path        = require("path");
 const rateLimit   = require("express-rate-limit");
 
+// ─── VALIDATE REQUIRED ENV VARS ───────────────────────────────────────────────
+const requiredEnv = ["JWT_SECRET", "DB_HOST", "DB_USER", "DB_PASSWORD", "DB_NAME"];
+const missing = requiredEnv.filter((k) => !process.env[k]);
+if (missing.length) {
+  console.error(`❌ Missing required environment variables: ${missing.join(", ")}`);
+  console.error("   Create a .env file with these variables. Exiting.");
+  process.exit(1);
+}
+
 const app = express();
 
+// ─── SECURITY HEADERS (helmet) ────────────────────────────────────────────────
+app.use(helmet({
+  contentSecurityPolicy: false,         // CSP can break SPA; configure per deployment
+  crossOriginEmbedderPolicy: false,
+}));
+
 // ─── CORS ─────────────────────────────────────────────────────────────────────
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  process.env.CRM_URL,
+].filter(Boolean);
+
 app.use(cors({
-  origin: [
-    process.env.FRONTEND_URL  || "http://localhost:3000",
-    process.env.CRM_URL       || "http://localhost:4000",
-    "https://techsupport4.com",
-    "https://www.techsupport4.com",
-    "https://crm.techsupport4.com",
-  ],
+  origin: allowedOrigins.length > 0 ? allowedOrigins : "http://localhost:3000",
   credentials: true,
 }));
 
-// ─── BODY PARSERS ─────────────────────────────────────────────────────────────
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// ─── BODY PARSERS (with size limits) ──────────────────────────────────────────
+app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 
 // ─── RATE LIMITING ────────────────────────────────────────────────────────────
 app.use("/api/auth", rateLimit({
   windowMs: 15 * 60 * 1000, // 15 min
-  max: 20,
+  max: 15,
+  standardHeaders: true,
+  legacyHeaders: false,
   message: { error: "Too many requests, please try again later" },
 }));
 
 app.use("/api/cases/contact", rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hr
   max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
   message: { error: "Too many contact submissions" },
 }));
 
@@ -44,10 +63,28 @@ app.use("/api/users",     require("./src/routes/user.routes"));
 // ─── HEALTH CHECK ────────────────────────────────────────────────────────────
 app.get("/api/health", (_req, res) => res.json({ status: "ok", time: new Date() }));
 
+// ─── 404 for unknown API routes ───────────────────────────────────────────────
+app.all("/api/*", (_req, res) => res.status(404).json({ error: "API endpoint not found" }));
+
 // ─── SERVE CRM FRONTEND (SPA) ─────────────────────────────────────────────────
 const publicDir = path.join(__dirname, "public");
 app.use(express.static(publicDir));
 app.get("*", (_req, res) => res.sendFile(path.join(publicDir, "index.html")));
+
+// ─── GLOBAL ERROR HANDLER ────────────────────────────────────────────────────
+app.use((err, _req, res, _next) => {
+  console.error("Unhandled error:", err);
+  res.status(500).json({ error: "Internal server error" });
+});
+
+// ─── UNCAUGHT EXCEPTION / REJECTION HANDLERS ─────────────────────────────────
+process.on("uncaughtException", (err) => {
+  console.error("UNCAUGHT EXCEPTION:", err);
+  process.exit(1);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error("UNHANDLED REJECTION:", reason);
+});
 
 // ─── START ────────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 4000;

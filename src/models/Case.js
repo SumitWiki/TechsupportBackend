@@ -1,9 +1,11 @@
-const db = require("../config/db");
+const db     = require("../config/db");
+const crypto = require("crypto");
 
+/** Cryptographically secure case ID */
 function generateCaseId() {
   const now  = new Date();
   const date = now.toISOString().slice(0, 10).replace(/-/g, "");
-  const rand = Math.floor(1000 + Math.random() * 9000);
+  const rand = crypto.randomBytes(3).toString("hex").toUpperCase().slice(0, 4);
   return `TS4-${date}-${rand}`;
 }
 

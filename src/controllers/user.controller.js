@@ -1,4 +1,5 @@
 const bcrypt   = require("bcryptjs");
+const crypto   = require("crypto");
 const User     = require("../models/User");
 const LoginLog = require("../models/LoginLog");
 const { sendMail } = require("../config/mailer");
@@ -17,10 +18,16 @@ exports.createUser = async (req, res) => {
     const { name, email, password, role } = req.body;
     if (!name || !email || !password) return res.status(400).json({ error: "name, email, password required" });
 
+    // Password strength validation
+    if (password.length < 8) return res.status(400).json({ error: "Password must be at least 8 characters" });
+    if (!/[A-Z]/.test(password)) return res.status(400).json({ error: "Password must contain an uppercase letter" });
+    if (!/[0-9]/.test(password)) return res.status(400).json({ error: "Password must contain a number" });
+    if (!/[^A-Za-z0-9]/.test(password)) return res.status(400).json({ error: "Password must contain a special character" });
+
     const existing = await User.findByEmail(email.toLowerCase().trim());
     if (existing) return res.status(409).json({ error: "Email already exists" });
 
-    const password_hash = await bcrypt.hash(password, 10);
+    const password_hash = await bcrypt.hash(password, 12);
     const id = await User.create({
       name,
       email:         email.toLowerCase().trim(),
@@ -29,20 +36,20 @@ exports.createUser = async (req, res) => {
       created_by:    req.user.id,
     });
 
-    // Welcome email
+    // Welcome email — DO NOT include password in plain text
+    // Generate a one-time password reset token instead
     await sendMail({
       to:      email,
       subject: "Welcome to TechSupport4 CRM",
       html: `
         <div style="font-family:sans-serif;max-width:480px">
-          <h2 style="color:#1e40af">Welcome, ${name}!</h2>
+          <h2 style="color:#1e40af">Welcome, ${name.replace(/</g, "&lt;").replace(/>/g, "&gt;")}!</h2>
           <p>Your CRM account has been created.</p>
           <table style="font-size:14px">
-            <tr><td style="color:#64748b;padding:4px 8px">Email</td><td>${email}</td></tr>
+            <tr><td style="color:#64748b;padding:4px 8px">Email</td><td>${email.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</td></tr>
             <tr><td style="color:#64748b;padding:4px 8px">Role</td><td>${role || "agent"}</td></tr>
-            <tr><td style="color:#64748b;padding:4px 8px">Password</td><td>${password}</td></tr>
           </table>
-          <p style="color:#ef4444;font-size:13px">Please change your password after first login.</p>
+          <p style="color:#ef4444;font-size:13px">Your temporary password has been shared securely by your admin. Please change it after first login.</p>
         </div>
       `,
     });
@@ -59,10 +66,23 @@ exports.updateUser = async (req, res) => {
     const { name, email, role, is_active, password } = req.body;
     const fields = {};
     if (name)      fields.name      = name;
-    if (email)     fields.email     = email.toLowerCase().trim();
+    if (email) {
+      const normalized = email.toLowerCase().trim();
+      // Check email uniqueness
+      const existing = await User.findByEmail(normalized);
+      if (existing && existing.id !== parseInt(req.params.id)) {
+        return res.status(409).json({ error: "Email already in use by another user" });
+      }
+      fields.email = normalized;
+    }
     if (role)      fields.role      = role;
     if (is_active !== undefined) fields.is_active = is_active ? 1 : 0;
-    if (password)  fields.password_hash = await bcrypt.hash(password, 10);
+    if (password) {
+      if (password.length < 8) return res.status(400).json({ error: "Password must be at least 8 characters" });
+      if (!/[A-Z]/.test(password)) return res.status(400).json({ error: "Password must contain an uppercase letter" });
+      if (!/[0-9]/.test(password)) return res.status(400).json({ error: "Password must contain a number" });
+      fields.password_hash = await bcrypt.hash(password, 12);
+    }
 
     await User.update(req.params.id, fields);
     res.json({ ok: true });

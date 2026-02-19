@@ -28,7 +28,17 @@ CREATE TABLE IF NOT EXISTS otp_codes (
   expires_at DATETIME     NOT NULL,
   used       TINYINT(1)   NOT NULL DEFAULT 0,
   created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  KEY idx_otp_lookup (user_id, used, expires_at)
+) ENGINE=InnoDB;
+
+-- ─── OTP ATTEMPT TRACKING (brute-force protection) ───────────────────────────
+CREATE TABLE IF NOT EXISTS otp_attempts (
+  id           INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  user_id      INT UNSIGNED NOT NULL,
+  attempted_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  KEY idx_attempts (user_id, attempted_at)
 ) ENGINE=InnoDB;
 
 -- ─── LOGIN LOGS ──────────────────────────────────────────────────────────────
@@ -64,8 +74,7 @@ CREATE TABLE IF NOT EXISTS customers (
 -- ─── CASES / TICKETS ─────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS cases (
   id           INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  case_id      VARCHAR(30)  NOT NULL UNIQUE,            -- e.g. TS4-20260218-0001
-  sr_no        INT UNSIGNED NOT NULL AUTO_INCREMENT UNIQUE,
+  case_id      VARCHAR(30)  NOT NULL UNIQUE,            -- e.g. TS4-20260218-A3F7
   customer_id  INT UNSIGNED NULL,
   name         VARCHAR(150) NOT NULL,
   email        VARCHAR(150) NOT NULL,
@@ -81,6 +90,8 @@ CREATE TABLE IF NOT EXISTS cases (
   KEY idx_email   (email),
   KEY idx_phone   (phone),
   KEY idx_status  (status),
+  KEY idx_assigned (assigned_to),
+  KEY idx_customer (customer_id),
   FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL,
   FOREIGN KEY (assigned_to) REFERENCES users(id)     ON DELETE SET NULL
 ) ENGINE=InnoDB AUTO_INCREMENT=1;

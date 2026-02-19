@@ -9,12 +9,17 @@ const path  = require("path");
 
 async function setup() {
   const conn = await mysql.createConnection({
-    host:     process.env.DB_HOST     || "localhost",
-    port:     process.env.DB_PORT     || 3306,
-    user:     process.env.DB_USER     || "root",
-    password: process.env.DB_PASSWORD || "",
+    host:     process.env.DB_HOST,
+    port:     parseInt(process.env.DB_PORT) || 3306,
+    user:     process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
     multipleStatements: true,
   });
+
+  if (!process.env.DB_HOST || !process.env.DB_USER) {
+    console.error("❌ DB_HOST and DB_USER must be set in .env");
+    process.exit(1);
+  }
 
   const sql = fs.readFileSync(path.join(__dirname, "schema.sql"), "utf8");
 
@@ -22,7 +27,8 @@ async function setup() {
     console.log("⏳ Running schema.sql …");
     await conn.query(sql);
     console.log("✅ Database & tables created successfully!");
-    console.log("   Default admin → admin@techsupport4.com / Admin@1234");
+    console.log("   Default admin email: admin@techsupport4.com");
+    console.log("   ⚠️  Change the default admin password immediately after first login!");
   } catch (err) {
     console.error("❌ Setup failed:", err.message);
   } finally {

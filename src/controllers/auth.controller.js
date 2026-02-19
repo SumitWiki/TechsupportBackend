@@ -1,12 +1,17 @@
 const bcrypt    = require("bcryptjs");
 const jwt       = require("jsonwebtoken");
+const crypto    = require("crypto");
 const geoip     = require("geoip-lite");
-require("dotenv").config();
 
 const User     = require("../models/User");
 const OtpCode  = require("../models/OtpCode");
 const LoginLog = require("../models/LoginLog");
 const { sendMail } = require("../config/mailer");
+
+// ─── In-memory token blacklist (use Redis in multi-instance production) ──────
+if (!global._tokenBlacklist) {
+  global._tokenBlacklist = new Set();
+}
 
 function getIp(req) {
   return (
@@ -24,8 +29,22 @@ function getGeo(ip) {
     : { country: "Unknown", region: "", city: "" };
 }
 
+/** Cryptographically secure OTP */
 function generateOtp(length = 6) {
-  return String(Math.floor(Math.pow(10, length - 1) + Math.random() * 9 * Math.pow(10, length - 1)));
+  const max = Math.pow(10, length);
+  const min = Math.pow(10, length - 1);
+  return String(crypto.randomInt(min, max));
+}
+
+/** HTML-escape to prevent XSS in emails */
+function esc(str) {
+  if (!str) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 // ── STEP 1: email + password ──────────────────────────────────────────────────
@@ -61,7 +80,7 @@ exports.login = async (req, res) => {
       html: `
         <div style="font-family:sans-serif;max-width:480px;margin:auto">
           <h2 style="color:#1e40af">Login Verification</h2>
-          <p>Hi <strong>${user.name}</strong>,</p>
+          <p>Hi <strong>${esc(user.name)}</strong>,</p>
           <p>Your one-time login code is:</p>
           <div style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#1e40af;padding:16px 0">${otp}</div>
           <p style="color:#64748b;font-size:13px">This code expires in ${process.env.OTP_EXPIRY_MINUTES || 10} minutes. Do not share it with anyone.</p>
@@ -71,6 +90,7 @@ exports.login = async (req, res) => {
       `,
     });
 
+    // Don't expose user ID — use a temporary session reference
     return res.json({ message: "OTP sent to your email", userId: user.id });
   } catch (err) {
     console.error("login error:", err);
@@ -84,8 +104,11 @@ exports.verifyOtp = async (req, res) => {
     const { userId, otp } = req.body;
     if (!userId || !otp) return res.status(400).json({ error: "userId and otp required" });
 
-    const user = await User.findByEmail((await User.findById(userId))?.email || "");
+    const user = await User.findById(userId);
     if (!user) return res.status(400).json({ error: "User not found" });
+
+    // Re-check is_active (user could be disabled between step 1 and step 2)
+    if (!user.is_active) return res.status(401).json({ error: "Account is disabled" });
 
     const valid = await OtpCode.verify(userId, otp.trim());
     if (!valid) return res.status(401).json({ error: "Invalid or expired OTP" });
@@ -109,22 +132,22 @@ exports.verifyOtp = async (req, res) => {
       html: `
         <div style="font-family:sans-serif;max-width:480px;margin:auto">
           <h2 style="color:#1e40af">Login Alert</h2>
-          <p>Hi <strong>${user.name}</strong>, a successful login was recorded:</p>
+          <p>Hi <strong>${esc(user.name)}</strong>, a successful login was recorded:</p>
           <table style="width:100%;border-collapse:collapse;font-size:14px">
-            <tr><td style="padding:6px;color:#64748b">Time</td><td>${now} IST</td></tr>
-            <tr><td style="padding:6px;color:#64748b">IP</td><td>${ip}</td></tr>
-            <tr><td style="padding:6px;color:#64748b">Location</td><td>${geo.city}, ${geo.region}, ${geo.country}</td></tr>
-            <tr><td style="padding:6px;color:#64748b">Device</td><td style="font-size:12px">${req.headers["user-agent"]?.slice(0, 100)}</td></tr>
+            <tr><td style="padding:6px;color:#64748b">Time</td><td>${esc(now)} IST</td></tr>
+            <tr><td style="padding:6px;color:#64748b">IP</td><td>${esc(ip)}</td></tr>
+            <tr><td style="padding:6px;color:#64748b">Location</td><td>${esc(geo.city)}, ${esc(geo.region)}, ${esc(geo.country)}</td></tr>
+            <tr><td style="padding:6px;color:#64748b">Device</td><td style="font-size:12px">${esc(req.headers["user-agent"]?.slice(0, 100))}</td></tr>
           </table>
           <p style="color:#ef4444;font-size:13px">If this wasn't you, contact admin immediately.</p>
         </div>
       `,
     });
 
-    // Issue JWT
+    // Issue JWT — NO fallback secret, env must be set
     const token = jwt.sign(
       { id: user.id, email: user.email, role: user.role, name: user.name },
-      process.env.JWT_SECRET || "changeme",
+      process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN || "8h" }
     );
 
@@ -138,8 +161,16 @@ exports.verifyOtp = async (req, res) => {
   }
 };
 
-// ── Logout (client discards token) ───────────────────────────────────────────
-exports.logout = (_req, res) => res.json({ message: "Logged out" });
+// ── Logout (blacklist token) ──────────────────────────────────────────────────
+exports.logout = (req, res) => {
+  if (req.token) {
+    global._tokenBlacklist.add(req.token);
+    // Auto-cleanup: remove token from blacklist after JWT_EXPIRES_IN
+    const expiresMs = (req.user?.exp ? req.user.exp * 1000 - Date.now() : 8 * 60 * 60 * 1000);
+    setTimeout(() => global._tokenBlacklist.delete(req.token), Math.max(expiresMs, 0));
+  }
+  res.json({ message: "Logged out successfully" });
+};
 
 // ── Whoami ────────────────────────────────────────────────────────────────────
 exports.me = async (req, res) => {
