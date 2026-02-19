@@ -1,0 +1,19 @@
+const router  = require("express").Router();
+const ctrl    = require("../controllers/case.controller");
+const authMw  = require("../middleware/auth.middleware");
+
+// Public — contact form submits here
+router.post("/contact", ctrl.createFromContact);
+
+// All the rest require login
+router.use(authMw);
+
+router.get  ("/",                     ctrl.listCases);
+router.get  ("/stats",                ctrl.stats);
+router.get  ("/:caseId",              ctrl.getCase);
+router.put  ("/:caseId/close",        ctrl.closeCase);
+router.put  ("/:caseId/reopen",       ctrl.reopenCase);
+router.put  ("/:caseId/assign",       ctrl.assignCase);
+router.post ("/:caseId/notes",        ctrl.addNote);
+
+module.exports = router;
