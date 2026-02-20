@@ -12,48 +12,53 @@ button{cursor:pointer;font-family:inherit}
 
 /* ── Layout ── */
 #app{display:flex;flex-direction:column;min-height:100vh}
-#navbar{background:#1e293b;border-bottom:1px solid #334155;padding:0 24px;height:56px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+#navbar{background:#1e293b;border-bottom:1px solid #334155;padding:0 16px;height:56px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
 #navbar .brand{font-size:18px;font-weight:700;color:#60a5fa}
-#navbar .nav-right{display:flex;align-items:center;gap:12px;font-size:14px}
-#user-info{color:#94a3b8}
+#navbar .nav-right{display:flex;align-items:center;gap:8px;font-size:14px}
+#user-info{color:#94a3b8;font-size:13px}
 #logout-btn{background:#ef4444;border:none;color:#fff;padding:6px 14px;border-radius:6px;font-size:13px}
-#sidebar{width:220px;background:#1e293b;border-right:1px solid #334155;flex-shrink:0;padding:16px 0}
+#sidebar{width:220px;background:#1e293b;border-right:1px solid #334155;flex-shrink:0;padding:16px 0;overflow-y:auto}
 #sidebar .nav-item{padding:10px 20px;cursor:pointer;border-left:3px solid transparent;font-size:14px;color:#94a3b8;transition:.15s}
 #sidebar .nav-item:hover{background:#334155;color:#e2e8f0}
 #sidebar .nav-item.active{border-left-color:#3b82f6;color:#60a5fa;background:#1e3a5f}
-#main-area{display:flex;flex:1}
-#content{flex:1;padding:24px;overflow-y:auto}
+#main-area{display:flex;flex:1;min-height:0}
+#content{flex:1;padding:20px;overflow-y:auto;-webkit-overflow-scrolling:touch}
+
+/* ── Mobile sidebar toggle ── */
+#menu-toggle{display:none;background:none;border:none;color:#60a5fa;font-size:24px;padding:4px}
 
 /* ── Auth screens ── */
 #auth-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;background:#0f172a}
-.auth-card{background:#1e293b;border:1px solid #334155;border-radius:12px;padding:36px;width:100%;max-width:400px}
+.auth-card{background:#1e293b;border:1px solid #334155;border-radius:12px;padding:32px;width:100%;max-width:400px}
 .auth-card h1{font-size:22px;font-weight:700;color:#60a5fa;margin-bottom:4px}
 .auth-card p{color:#94a3b8;font-size:13px;margin-bottom:24px}
 
 /* ── Form elements ── */
-.form-group{margin-bottom:16px}
+.form-group{margin-bottom:14px}
 label.fl{display:block;font-size:13px;color:#94a3b8;margin-bottom:6px}
-input[type=text],input[type=email],input[type=password],input[type=tel],select,textarea{
+input[type=text],input[type=email],input[type=password],input[type=tel],input[type=search],select,textarea{
   width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:9px 12px;border-radius:7px;font-size:14px;outline:none}
 input:focus,select:focus,textarea:focus{border-color:#3b82f6}
 textarea{min-height:80px;resize:vertical}
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:9px 18px;border-radius:7px;font-size:14px;font-weight:600;border:none;transition:.15s}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:9px 18px;border-radius:7px;font-size:14px;font-weight:600;border:none;transition:.15s;white-space:nowrap}
 .btn-primary{background:#3b82f6;color:#fff}.btn-primary:hover{background:#2563eb}
 .btn-danger{background:#ef4444;color:#fff}.btn-danger:hover{background:#dc2626}
 .btn-success{background:#22c55e;color:#fff}.btn-success:hover{background:#16a34a}
-.btn-sm{padding:5px 12px;font-size:13px}
+.btn-warning{background:#f59e0b;color:#000}.btn-warning:hover{background:#d97706}
+.btn-sm{padding:5px 12px;font-size:12px}
 .btn-outline{background:transparent;border:1px solid #475569;color:#94a3b8}.btn-outline:hover{border-color:#60a5fa;color:#60a5fa}
+.btn:disabled{opacity:.5;cursor:not-allowed}
 
 /* ── Cards / stats ── */
-.stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:16px;margin-bottom:24px}
-.stat-card{background:#1e293b;border:1px solid #334155;border-radius:10px;padding:18px;text-align:center}
-.stat-card .val{font-size:32px;font-weight:700;color:#60a5fa}
-.stat-card .lbl{font-size:13px;color:#64748b;margin-top:4px}
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;margin-bottom:20px}
+.stat-card{background:#1e293b;border:1px solid #334155;border-radius:10px;padding:16px;text-align:center}
+.stat-card .val{font-size:28px;font-weight:700;color:#60a5fa}
+.stat-card .lbl{font-size:12px;color:#64748b;margin-top:4px}
 
 /* ── Table ── */
-.tbl-wrap{overflow-x:auto}
+.tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
 table{width:100%;border-collapse:collapse;font-size:13px}
-th{background:#1e293b;color:#94a3b8;padding:10px 12px;text-align:left;border-bottom:1px solid #334155;font-weight:600}
+th{background:#1e293b;color:#94a3b8;padding:10px 12px;text-align:left;border-bottom:1px solid #334155;font-weight:600;white-space:nowrap}
 td{padding:10px 12px;border-bottom:1px solid #1e293b;vertical-align:middle}
 tr:hover td{background:#1e3a5f}
 .badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600}
@@ -63,26 +68,52 @@ tr:hover td{background:#1e3a5f}
 .badge-reopened{background:#d97706;color:#fef3c7}
 .badge-admin{background:#7c3aed;color:#e9d5ff}
 .badge-agent{background:#0f766e;color:#ccfbf1}
+.badge-success{background:#166534;color:#bbf7d0}
 
 /* ── Misc ── */
-.page-title{font-size:20px;font-weight:700;color:#f1f5f9;margin-bottom:20px}
-.section-card{background:#1e293b;border:1px solid #334155;border-radius:10px;padding:20px;margin-bottom:20px}
+.page-title{font-size:20px;font-weight:700;color:#f1f5f9;margin-bottom:16px}
+.section-card{background:#1e293b;border:1px solid #334155;border-radius:10px;padding:16px;margin-bottom:16px}
 .err{color:#f87171;font-size:13px;margin-top:8px}
 .ok{color:#4ade80;font-size:13px;margin-top:8px}
-.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-@media(max-width:600px){.grid-2{grid-template-columns:1fr}#sidebar{display:none}}
-.search-row{display:flex;gap:8px;margin-bottom:16px}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.search-row{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
 .hidden{display:none!important}
 .detail-row{display:flex;gap:8px;align-items:baseline;margin-bottom:8px;font-size:14px}
-.detail-row .key{color:#64748b;min-width:120px;font-size:13px}
-input[type=search]{width:100%;max-width:360px}
+.detail-row .key{color:#64748b;min-width:100px;font-size:13px}
+.pagination{display:flex;align-items:center;justify-content:center;gap:12px;margin-top:16px;flex-wrap:wrap}
+.pagination button{min-width:36px}
+.pagination .pg-info{color:#94a3b8;font-size:13px}
+
+/* ── Mobile Responsive ── */
+@media(max-width:768px){
+  #menu-toggle{display:block}
+  #sidebar{position:fixed;top:56px;left:0;bottom:0;width:240px;z-index:99;transform:translateX(-100%);transition:transform .2s ease}
+  #sidebar.open{transform:translateX(0)}
+  #sidebar-overlay{display:none;position:fixed;top:56px;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:98}
+  #sidebar-overlay.open{display:block}
+  .grid-2{grid-template-columns:1fr}
+  #content{padding:12px}
+  .stat-grid{grid-template-columns:repeat(2,1fr)}
+  .stat-card .val{font-size:22px}
+  .stat-card .lbl{font-size:11px}
+  .search-row{flex-direction:column}
+  .search-row input,.search-row select,.search-row button{width:100%}
+  .page-title{font-size:18px}
+  .section-card{padding:12px}
+  #navbar{padding:0 10px}
+  #user-info{display:none}
+  .detail-row{flex-direction:column;gap:2px}
+  .detail-row .key{min-width:auto;font-weight:600}
+  table{font-size:12px}
+  th,td{padding:8px 6px}
+  .auth-card{padding:24px;margin:12px}
+}
 </style>
 </head>
 <body>
 
 <!-- ═══════════════════════════════════════════════════════ AUTH SCREENS -->
-<div id="auth-screen">
-  <!-- Step 1: Login -->
+<div id="auth-screen" style="display:none">
   <div class="auth-card" id="login-form">
     <h1>TechSupport4 CRM</h1>
     <p>Sign in to your account</p>
@@ -91,7 +122,6 @@ input[type=search]{width:100%;max-width:360px}
     <button class="btn btn-primary" style="width:100%" onclick="doLogin()">Continue →</button>
     <div class="err hidden" id="a-err"></div>
   </div>
-  <!-- Step 2: OTP -->
   <div class="auth-card hidden" id="otp-form">
     <h1>Two-Factor Auth</h1>
     <p id="otp-hint">Enter the 6-digit code sent to your email</p>
@@ -104,13 +134,17 @@ input[type=search]{width:100%;max-width:360px}
 <!-- ═══════════════════════════════════════════════════════ MAIN APP -->
 <div id="app" class="hidden">
   <nav id="navbar">
-    <span class="brand">⚡ TS4 CRM</span>
+    <div style="display:flex;align-items:center;gap:10px">
+      <button id="menu-toggle" onclick="toggleSidebar()">☰</button>
+      <span class="brand">⚡ TS4 CRM</span>
+    </div>
     <div class="nav-right">
       <span id="user-info"></span>
       <button id="logout-btn" onclick="doLogout()">Logout</button>
     </div>
   </nav>
   <div id="main-area">
+    <div id="sidebar-overlay" onclick="toggleSidebar()"></div>
     <div id="sidebar">
       <div class="nav-item active" data-page="dashboard">📊 Dashboard</div>
       <div class="nav-item" data-page="cases">🎫 Cases</div>
@@ -123,186 +157,230 @@ input[type=search]{width:100%;max-width:360px}
 </div>
 
 <script>
-// ─── State ───────────────────────────────────────────────────────────────────
-const API   = "/api";
-let currentUser = null;
-let pendingUserId = null;
+/* ── Block console API access in production ── */
+(function(){
+  if(location.hostname!=="localhost"&&location.hostname!=="127.0.0.1"){
+    ["log","warn","info","debug","table","dir","trace","clear"].forEach(function(m){
+      console[m]=function(){};
+    });
+  }
+})();
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-async function api(method, path, body) {
-  const r = await fetch(API + path, {
-    method,
-    headers: { "Content-Type":"application/json" },
-    credentials: "include",
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  if (r.status === 401) { doLogout(); return; }
+/* ── State ── */
+const API="/api";
+let currentUser=null;
+let pendingUserId=null;
+let casesPage=1;
+const PER_PAGE=20;
+
+/* ── Helpers ── */
+async function api(method,path,body){
+  const r=await fetch(API+path,{method,headers:{"Content-Type":"application/json"},credentials:"include",body:body?JSON.stringify(body):undefined});
+  if(r.status===401){doLogout();return;}
   return r.json();
 }
+function showErr(id,msg){const el=document.getElementById(id);if(el){el.textContent=msg;el.classList.remove("hidden");}}
+function clearErr(id){const el=document.getElementById(id);if(el){el.textContent="";el.classList.add("hidden");}}
+function badge(s){return`<span class="badge badge-${s}">${s.replace("_"," ")}</span>`;}
+function fmtDate(d){return d?new Date(d).toLocaleString("en-IN",{dateStyle:"medium",timeStyle:"short"}):"—";}
+function esc(s){return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
 
-function showErr(id, msg)  { const el=document.getElementById(id); el.textContent=msg; el.classList.remove("hidden"); }
-function clearErr(id)      { const el=document.getElementById(id); if(el){el.textContent=""; el.classList.add("hidden");} }
-function badge(status)     { return `<span class="badge badge-${status}">${status.replace("_"," ")}</span>`; }
-function fmtDate(d)        { return d ? new Date(d).toLocaleString("en-IN",{dateStyle:"medium",timeStyle:"short"}) : "—"; }
-function esc(s)            { return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+/* ── Mobile sidebar ── */
+function toggleSidebar(){
+  document.getElementById("sidebar").classList.toggle("open");
+  document.getElementById("sidebar-overlay").classList.toggle("open");
+}
 
-// ─── Auth ─────────────────────────────────────────────────────────────────────
-async function doLogin() {
+/* ══════════ AUTH ══════════ */
+async function doLogin(){
   clearErr("a-err");
-  const email = document.getElementById("a-email").value.trim();
-  const pass  = document.getElementById("a-pass").value;
-  if (!email || !pass) return showErr("a-err","Enter email and password");
-  const btn = document.querySelector("#login-form .btn"); btn.disabled=true; btn.textContent="Sending OTP…";
-  const res = await fetch(API+"/auth/login",{
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    credentials:"include",
-    body:JSON.stringify({email,password:pass})
-  });
-  const data = await res.json();
-  btn.disabled=false; btn.textContent="Continue →";
-  if (!res.ok) return showErr("a-err", data.error || "Login failed");
-  pendingUserId = data.userId;
-  document.getElementById("otp-hint").textContent = `Code sent to ${email}`;
-  document.getElementById("login-form").classList.add("hidden");
-  document.getElementById("otp-form").classList.remove("hidden");
+  const email=document.getElementById("a-email").value.trim();
+  const pass=document.getElementById("a-pass").value;
+  if(!email||!pass)return showErr("a-err","Enter email and password");
+  const btn=document.querySelector("#login-form .btn");btn.disabled=true;btn.textContent="Sending OTP…";
+  try{
+    const res=await fetch(API+"/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"include",body:JSON.stringify({email,password:pass})});
+    const data=await res.json();
+    btn.disabled=false;btn.textContent="Continue →";
+    if(!res.ok)return showErr("a-err",data.error||"Login failed");
+    pendingUserId=data.userId;
+    document.getElementById("otp-hint").textContent=`Code sent to ${email}`;
+    document.getElementById("login-form").classList.add("hidden");
+    document.getElementById("otp-form").classList.remove("hidden");
+  }catch(e){btn.disabled=false;btn.textContent="Continue →";showErr("a-err","Network error");}
 }
 
-async function doVerifyOtp() {
+async function doVerifyOtp(){
   clearErr("otp-err");
-  const otp = document.getElementById("a-otp").value.trim();
-  if (otp.length !== 6) return showErr("otp-err","Enter the 6-digit code");
-  const btn = document.querySelector("#otp-form .btn"); btn.disabled=true; btn.textContent="Verifying…";
-  const res = await fetch(API+"/auth/verify-otp",{
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    credentials:"include",
-    body:JSON.stringify({userId:pendingUserId,otp})
-  });
-  const data = await res.json();
-  btn.disabled=false; btn.textContent="Verify & Login";
-  if (!res.ok) return showErr("otp-err", data.error || "Invalid OTP");
-  // Cookie is set automatically by the server (HttpOnly)
-  currentUser = data.user;
-  initApp();
+  const otp=document.getElementById("a-otp").value.trim();
+  if(otp.length!==6)return showErr("otp-err","Enter the 6-digit code");
+  const btn=document.querySelector("#otp-form .btn");btn.disabled=true;btn.textContent="Verifying…";
+  try{
+    const res=await fetch(API+"/auth/verify-otp",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"include",body:JSON.stringify({userId:pendingUserId,otp})});
+    const data=await res.json();
+    btn.disabled=false;btn.textContent="Verify & Login";
+    if(!res.ok)return showErr("otp-err",data.error||"Invalid OTP");
+    currentUser=data.user;
+    initApp();
+  }catch(e){btn.disabled=false;btn.textContent="Verify & Login";showErr("otp-err","Network error");}
 }
 
-function doLogout() {
-  // Call logout API — server clears the HttpOnly cookie
+function doLogout(){
   fetch(API+"/auth/logout",{method:"POST",credentials:"include"}).catch(()=>{});
   currentUser=null;
   location.reload();
 }
 
-// ─── App Init ─────────────────────────────────────────────────────────────────
-function initApp() {
-  document.getElementById("auth-screen").classList.add("hidden");
+/* ══════════ APP INIT ══════════ */
+function initApp(){
+  document.getElementById("auth-screen").style.display="none";
   document.getElementById("app").classList.remove("hidden");
-  document.getElementById("user-info").textContent = `${currentUser.name} (${currentUser.role})`;
-
-  // Hide admin-only sidebar items for non-admins
-  if (currentUser.role !== "admin") {
-    document.querySelectorAll(".admin-only").forEach(el => el.classList.add("hidden"));
-  }
-
-  // Sidebar nav
-  document.querySelectorAll("#sidebar .nav-item").forEach(item => {
-    item.addEventListener("click", () => {
+  document.getElementById("user-info").textContent=`${currentUser.name} (${currentUser.role})`;
+  if(currentUser.role!=="admin")document.querySelectorAll(".admin-only").forEach(el=>el.classList.add("hidden"));
+  document.querySelectorAll("#sidebar .nav-item").forEach(item=>{
+    item.addEventListener("click",()=>{
       document.querySelectorAll("#sidebar .nav-item").forEach(i=>i.classList.remove("active"));
       item.classList.add("active");
       loadPage(item.dataset.page);
+      document.getElementById("sidebar").classList.remove("open");
+      document.getElementById("sidebar-overlay").classList.remove("open");
     });
   });
-
   loadPage("dashboard");
 }
 
-// ─── Pages ────────────────────────────────────────────────────────────────────
-async function loadPage(name) {
-  const el = document.getElementById("content");
-  el.innerHTML = '<p style="color:#64748b;padding:24px">Loading…</p>';
-  if (name === "dashboard")  await pageDashboard(el);
-  if (name === "cases")      await pageCases(el);
-  if (name === "customers")  await pageCustomers(el);
-  if (name === "users")      await pageUsers(el);
-  if (name === "logs")       await pageLogs(el);
+async function loadPage(name){
+  const el=document.getElementById("content");
+  el.innerHTML='<p style="color:#64748b;padding:24px">Loading…</p>';
+  if(name==="dashboard")await pageDashboard(el);
+  if(name==="cases")await pageCases(el);
+  if(name==="customers")await pageCustomers(el);
+  if(name==="users")await pageUsers(el);
+  if(name==="logs")await pageLogs(el);
 }
 
-// ── Dashboard ────────────────────────────────────────────────────────────────
-async function pageDashboard(el) {
-  const stats = await api("GET","/cases/stats");
-  if (!stats) return;
-  el.innerHTML = `
+/* ══════════ DASHBOARD ══════════ */
+async function pageDashboard(el){
+  const s=await api("GET","/cases/stats");
+  if(!s)return;
+  el.innerHTML=`
     <h2 class="page-title">📊 Dashboard</h2>
     <div class="stat-grid">
-      <div class="stat-card"><div class="val">${stats.total}</div><div class="lbl">Total Cases</div></div>
-      <div class="stat-card"><div class="val" style="color:#60a5fa">${stats.open}</div><div class="lbl">Open</div></div>
-      <div class="stat-card"><div class="val" style="color:#a78bfa">${stats.in_progress}</div><div class="lbl">In Progress</div></div>
-      <div class="stat-card"><div class="val" style="color:#6ee7b7">${stats.closed}</div><div class="lbl">Closed</div></div>
-      <div class="stat-card"><div class="val" style="color:#fbbf24">${stats.reopened}</div><div class="lbl">Reopened</div></div>
+      <div class="stat-card"><div class="val">${s.total||0}</div><div class="lbl">Total Cases</div></div>
+      <div class="stat-card"><div class="val" style="color:#60a5fa">${s.open||0}</div><div class="lbl">Open</div></div>
+      <div class="stat-card"><div class="val" style="color:#a78bfa">${s.in_progress||0}</div><div class="lbl">In Progress</div></div>
+      <div class="stat-card"><div class="val" style="color:#6ee7b7">${s.closed||0}</div><div class="lbl">Closed</div></div>
+      <div class="stat-card"><div class="val" style="color:#fbbf24">${s.reopened||0}</div><div class="lbl">Reopened</div></div>
     </div>
-    <div class="section-card">
-      <p style="color:#64748b;font-size:14px">Welcome back, <strong style="color:#f1f5f9">${esc(currentUser.name)}</strong>. Use the sidebar to manage cases, customers and users.</p>
-    </div>`;
+    <div class="section-card"><p style="color:#64748b;font-size:14px">Welcome back, <strong style="color:#f1f5f9">${esc(currentUser.name)}</strong>.</p></div>`;
 }
 
-// ── Cases ────────────────────────────────────────────────────────────────────
-async function pageCases(el) {
-  el.innerHTML = `
+/* ══════════ CASES — Search + Filter + Pagination + CSV + Manual Create ══════════ */
+async function pageCases(el){
+  casesPage=1;
+  el.innerHTML=`
     <h2 class="page-title">🎫 Cases</h2>
-    <div class="search-row">
-      <select id="filter-status" onchange="filterCases()">
-        <option value="">All Statuses</option>
-        <option value="open">Open</option>
-        <option value="in_progress">In Progress</option>
-        <option value="closed">Closed</option>
-        <option value="reopened">Reopened</option>
-      </select>
+    <div class="section-card" style="padding:12px 16px">
+      <div class="search-row" style="margin-bottom:0">
+        <input type="search" id="case-search" placeholder="Search Case ID, email, name, phone…" style="flex:1;min-width:0"/>
+        <select id="filter-status" style="min-width:120px">
+          <option value="">All Statuses</option><option value="open">Open</option><option value="in_progress">In Progress</option>
+          <option value="closed">Closed</option><option value="reopened">Reopened</option>
+        </select>
+        <button class="btn btn-primary btn-sm" onclick="casesPage=1;filterCases()">Search</button>
+        <button class="btn btn-success btn-sm" onclick="exportCSV()" title="Export CSV">📥 CSV</button>
+        <button class="btn btn-warning btn-sm" onclick="toggleEl('create-ticket-form')">+ New Ticket</button>
+      </div>
     </div>
-    <div id="cases-table"><p style="color:#64748b">Loading…</p></div>`;
+    <div id="create-ticket-form" class="section-card hidden">
+      <strong>Create Ticket Manually</strong>
+      <div class="grid-2" style="margin-top:12px">
+        <div class="form-group"><label class="fl">Name *</label><input type="text" id="t-name"/></div>
+        <div class="form-group"><label class="fl">Email *</label><input type="email" id="t-email"/></div>
+        <div class="form-group"><label class="fl">Phone</label><input type="tel" id="t-phone"/></div>
+        <div class="form-group"><label class="fl">Subject</label><input type="text" id="t-subject"/></div>
+        <div class="form-group" style="grid-column:1/-1"><label class="fl">Message *</label><textarea id="t-message"></textarea></div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" onclick="createTicket()">Create Ticket</button>
+        <button class="btn btn-outline btn-sm" onclick="toggleEl('create-ticket-form')">Cancel</button>
+      </div>
+      <div class="err hidden" id="t-err"></div><div class="ok hidden" id="t-ok"></div>
+    </div>
+    <div id="cases-table"></div>
+    <div id="cases-pg" class="pagination"></div>`;
+  document.getElementById("case-search").addEventListener("keydown",e=>{if(e.key==="Enter"){casesPage=1;filterCases();}});
+  document.getElementById("filter-status").addEventListener("change",()=>{casesPage=1;filterCases();});
   filterCases();
 }
 
-async function filterCases() {
-  const status = document.getElementById("filter-status")?.value || "";
-  const data = await api("GET", `/cases?status=${status}&limit=200`);
-  if (!data) return;
-  const wrap = document.getElementById("cases-table");
-  if (!data.rows?.length) { wrap.innerHTML='<p style="color:#64748b">No cases found.</p>'; return; }
-  wrap.innerHTML = `<div class="tbl-wrap"><table>
-    <thead><tr><th>Case ID</th><th>SR#</th><th>Name</th><th>Email</th><th>Phone</th><th>Subject</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead>
-    <tbody>${data.rows.map(c=>`
-      <tr>
-        <td><a href="#" style="color:#60a5fa" onclick="viewCase('${esc(c.case_id)}')">${esc(c.case_id)}</a></td>
-        <td>${c.sr_no}</td><td>${esc(c.name)}</td><td>${esc(c.email)}</td><td>${esc(c.phone)}</td>
-        <td title="${esc(c.subject)}">${esc(c.subject?.slice(0,40))}</td>
-        <td>${badge(c.status)}</td>
-        <td>${fmtDate(c.created_at)}</td>
-        <td style="white-space:nowrap">
-          ${c.status!=='closed'?`<button class="btn btn-danger btn-sm" onclick="caseAction('close','${esc(c.case_id)}')">Close</button> `:''}
-          ${c.status==='closed'?`<button class="btn btn-success btn-sm" onclick="caseAction('reopen','${esc(c.case_id)}')">Reopen</button>`:''}
-        </td>
-      </tr>`).join("")}
-    </tbody></table></div>`;
+function toggleEl(id){document.getElementById(id).classList.toggle("hidden");clearErr("t-err");clearErr("t-ok");}
+
+async function createTicket(){
+  clearErr("t-err");clearErr("t-ok");
+  const name=document.getElementById("t-name").value.trim();
+  const email=document.getElementById("t-email").value.trim();
+  const message=document.getElementById("t-message").value.trim();
+  if(!name||!email||!message)return showErr("t-err","Name, Email and Message required");
+  const res=await api("POST","/cases/manual",{name,email,phone:document.getElementById("t-phone").value.trim()||"N/A",subject:document.getElementById("t-subject").value.trim()||"Manual Ticket",message});
+  if(res?.ok){
+    const ok=document.getElementById("t-ok");ok.textContent=`✅ Ticket created! Case ID: ${res.caseId}`;ok.classList.remove("hidden");
+    ["t-name","t-email","t-phone","t-subject","t-message"].forEach(id=>document.getElementById(id).value="");
+    filterCases();
+  }else showErr("t-err",res?.error||"Failed");
 }
 
-async function caseAction(action, caseId) {
-  if (!confirm(`${action} case ${caseId}?`)) return;
-  await api("PUT", `/cases/${caseId}/${action}`);
+async function filterCases(){
+  const status=document.getElementById("filter-status")?.value||"";
+  const search=document.getElementById("case-search")?.value.trim()||"";
+  const data=await api("GET",`/cases?status=${encodeURIComponent(status)}&search=${encodeURIComponent(search)}&page=${casesPage}&limit=${PER_PAGE}`);
+  if(!data)return;
+  const wrap=document.getElementById("cases-table");
+  const pg=document.getElementById("cases-pg");
+  if(!data.rows?.length){wrap.innerHTML='<p style="color:#64748b">No cases found.</p>';pg.innerHTML='';return;}
+  wrap.innerHTML=`<div class="tbl-wrap"><table>
+    <thead><tr><th>Case ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Subject</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead>
+    <tbody>${data.rows.map(c=>`<tr>
+      <td><a href="#" style="color:#60a5fa;white-space:nowrap" onclick="viewCase('${esc(c.case_id)}')">${esc(c.case_id)}</a></td>
+      <td style="white-space:nowrap">${esc(c.name)}</td><td>${esc(c.email)}</td><td style="white-space:nowrap">${esc(c.phone)}</td>
+      <td title="${esc(c.subject)}">${esc(c.subject?.slice(0,30))}</td><td>${badge(c.status)}</td>
+      <td style="white-space:nowrap">${fmtDate(c.created_at)}</td>
+      <td style="white-space:nowrap">
+        ${c.status!=='closed'?`<button class="btn btn-danger btn-sm" onclick="caseAction('close','${esc(c.case_id)}')">Close</button> `:''}
+        ${c.status==='closed'?`<button class="btn btn-success btn-sm" onclick="caseAction('reopen','${esc(c.case_id)}')">Reopen</button>`:''}
+      </td></tr>`).join("")}</tbody></table></div>`;
+  const tp=Math.ceil(data.total/PER_PAGE);
+  pg.innerHTML=tp>1?`
+    <button class="btn btn-outline btn-sm" ${casesPage<=1?'disabled':''} onclick="casesPage--;filterCases()">← Prev</button>
+    <span class="pg-info">Page ${casesPage} of ${tp} (${data.total} total)</span>
+    <button class="btn btn-outline btn-sm" ${casesPage>=tp?'disabled':''} onclick="casesPage++;filterCases()">Next →</button>`
+    :`<span class="pg-info">${data.total} case${data.total!==1?'s':''}</span>`;
+}
+
+function exportCSV(){
+  const t=document.querySelector("#cases-table table");
+  if(!t)return alert("No data");
+  const rows=[];
+  t.querySelectorAll("tr").forEach(tr=>{const c=[];tr.querySelectorAll("th,td").forEach(td=>c.push('"'+td.innerText.replace(/"/g,'""')+'"'));rows.push(c.join(","));});
+  const b=new Blob([rows.join("\n")],{type:"text/csv"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=`cases-${new Date().toISOString().slice(0,10)}.csv`;a.click();
+}
+
+async function caseAction(action,caseId){
+  if(!confirm(`${action} case ${caseId}?`))return;
+  await api("PUT",`/cases/${caseId}/${action}`);
   filterCases();
 }
 
-async function viewCase(caseId) {
-  const c = await api("GET", `/cases/${caseId}`);
-  if (!c) return;
-  const el = document.getElementById("content");
-  el.innerHTML = `
-    <button class="btn btn-outline btn-sm" onclick="loadPage('cases')" style="margin-bottom:16px">← Back to Cases</button>
+async function viewCase(caseId){
+  const c=await api("GET",`/cases/${caseId}`);if(!c)return;
+  const el=document.getElementById("content");
+  el.innerHTML=`
+    <button class="btn btn-outline btn-sm" onclick="loadPage('cases')" style="margin-bottom:16px">← Back</button>
     <h2 class="page-title">Case: ${esc(c.case_id)}</h2>
     <div class="section-card">
       <div class="grid-2">
         <div>
-          <div class="detail-row"><span class="key">SR No.</span><strong>#${c.sr_no}</strong></div>
           <div class="detail-row"><span class="key">Status</span>${badge(c.status)}</div>
           <div class="detail-row"><span class="key">Source</span>${esc(c.source)}</div>
           <div class="detail-row"><span class="key">Created</span>${fmtDate(c.created_at)}</div>
@@ -316,51 +394,41 @@ async function viewCase(caseId) {
         </div>
       </div>
       <div style="margin-top:16px"><strong>Subject:</strong> ${esc(c.subject)}</div>
-      <div style="margin-top:8px;background:#0f172a;padding:12px;border-radius:8px;font-size:14px;line-height:1.6">${esc(c.message)}</div>
+      <div style="margin-top:8px;background:#0f172a;padding:12px;border-radius:8px;font-size:14px;line-height:1.6;word-break:break-word">${esc(c.message)}</div>
     </div>
     <div class="section-card">
-      <strong style="font-size:15px">Actions</strong>
+      <strong>Actions</strong>
       <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
         ${c.status!=='closed'?`<button class="btn btn-danger btn-sm" onclick="caseActionView('close','${esc(c.case_id)}')">Close Case</button>`:''}
         ${c.status==='closed'?`<button class="btn btn-success btn-sm" onclick="caseActionView('reopen','${esc(c.case_id)}')">Reopen Case</button>`:''}
       </div>
     </div>
     <div class="section-card">
-      <strong style="font-size:15px">Notes / Timeline</strong>
+      <strong>Notes / Timeline</strong>
       <div id="notes-list" style="margin:12px 0">${c.notes?.map(n=>`
         <div style="background:#0f172a;padding:10px 14px;border-radius:8px;margin-bottom:8px;font-size:13px">
           <span style="color:#60a5fa">${esc(n.author)}</span>
           <span style="color:#475569;margin-left:8px">${fmtDate(n.created_at)}</span>
-          <div style="margin-top:4px">${esc(n.note)}</div>
+          <div style="margin-top:4px;word-break:break-word">${esc(n.note)}</div>
         </div>`).join("")||'<p style="color:#64748b;font-size:13px">No notes yet.</p>'}</div>
-      <div style="display:flex;gap:8px">
-        <textarea id="note-text" placeholder="Add a note…" style="flex:1;min-height:60px"></textarea>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <textarea id="note-text" placeholder="Add a note…" style="flex:1;min-height:60px;min-width:200px"></textarea>
         <button class="btn btn-primary btn-sm" style="align-self:flex-end" onclick="addNote('${esc(c.case_id)}')">Add Note</button>
       </div>
     </div>`;
 }
 
-async function caseActionView(action, caseId) {
-  await api("PUT", `/cases/${caseId}/${action}`);
-  viewCase(caseId);
-}
+async function caseActionView(a,id){await api("PUT",`/cases/${id}/${a}`);viewCase(id);}
+async function addNote(id){const n=document.getElementById("note-text").value.trim();if(!n)return;await api("POST",`/cases/${id}/notes`,{note:n});viewCase(id);}
 
-async function addNote(caseId) {
-  const note = document.getElementById("note-text").value.trim();
-  if (!note) return;
-  await api("POST", `/cases/${caseId}/notes`, { note });
-  viewCase(caseId);
-}
-
-// ── Customers ────────────────────────────────────────────────────────────────
-async function pageCustomers(el) {
-  el.innerHTML = `
+/* ══════════ CUSTOMERS ══════════ */
+async function pageCustomers(el){
+  el.innerHTML=`
     <h2 class="page-title">👥 Customers</h2>
     <div class="section-card">
       <strong>Search Customer</strong>
       <div class="search-row" style="margin-top:12px">
-        <input type="text" id="s-mobile" placeholder="Mobile number"/>
-        <input type="text" id="s-email"  placeholder="Email address"/>
+        <input type="text" id="s-mobile" placeholder="Mobile number"/><input type="text" id="s-email" placeholder="Email"/>
         <button class="btn btn-primary btn-sm" onclick="searchCustomer()">Search</button>
       </div>
       <div id="search-result"></div>
@@ -368,142 +436,110 @@ async function pageCustomers(el) {
     <div class="section-card">
       <strong>Add Customer</strong>
       <div class="grid-2" style="margin-top:12px">
-        <div class="form-group"><label class="fl">Full Name *</label><input type="text" id="c-name"/></div>
+        <div class="form-group"><label class="fl">Name *</label><input type="text" id="c-name"/></div>
         <div class="form-group"><label class="fl">Email</label><input type="email" id="c-email"/></div>
         <div class="form-group"><label class="fl">Phone *</label><input type="tel" id="c-phone"/></div>
-        <div class="form-group"><label class="fl">Plan</label><input type="text" id="c-plan" placeholder="e.g. Premium, Basic"/></div>
-        <div class="form-group" style="grid-column:1/-1"><label class="fl">Address (special characters allowed)</label><textarea id="c-addr" placeholder="House No., Street, City, State, PIN"></textarea></div>
+        <div class="form-group"><label class="fl">Plan</label><input type="text" id="c-plan" placeholder="Premium, Basic"/></div>
+        <div class="form-group" style="grid-column:1/-1"><label class="fl">Address</label><textarea id="c-addr"></textarea></div>
         <div class="form-group" style="grid-column:1/-1"><label class="fl">Notes</label><textarea id="c-notes"></textarea></div>
       </div>
       <button class="btn btn-primary" onclick="addCustomer()">Save Customer</button>
-      <div class="err hidden" id="c-err"></div>
-      <div class="ok hidden" id="c-ok"></div>
+      <div class="err hidden" id="c-err"></div><div class="ok hidden" id="c-ok"></div>
     </div>`;
 }
 
-async function searchCustomer() {
-  const mobile = document.getElementById("s-mobile").value.trim();
-  const email  = document.getElementById("s-email").value.trim();
-  if (!mobile && !email) return;
-  const data = await api("GET", `/customers/search?mobile=${encodeURIComponent(mobile)}&email=${encodeURIComponent(email)}`);
-  const wrap = document.getElementById("search-result");
-  if (!data?.results?.length) { wrap.innerHTML='<p style="color:#64748b;margin-top:8px;font-size:13px">No customers found.</p>'; return; }
-  wrap.innerHTML = `<div class="tbl-wrap" style="margin-top:12px"><table>
-    <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Plan</th><th>Address</th><th>Notes</th><th>Added</th></tr></thead>
-    <tbody>${data.results.map(c=>`
-      <tr><td>${esc(c.name)}</td><td>${esc(c.email)}</td><td>${esc(c.phone)}</td><td>${esc(c.plan)}</td>
-      <td>${esc(c.address)}</td><td>${esc(c.notes)}</td><td>${fmtDate(c.created_at)}</td></tr>`).join("")}
-    </tbody></table></div>`;
+async function searchCustomer(){
+  const m=document.getElementById("s-mobile").value.trim(),e=document.getElementById("s-email").value.trim();
+  if(!m&&!e)return;
+  const data=await api("GET",`/customers/search?mobile=${encodeURIComponent(m)}&email=${encodeURIComponent(e)}`);
+  const w=document.getElementById("search-result");
+  if(!data?.results?.length){w.innerHTML='<p style="color:#64748b;margin-top:8px;font-size:13px">No customers found.</p>';return;}
+  w.innerHTML=`<div class="tbl-wrap" style="margin-top:12px"><table>
+    <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Plan</th><th>Added</th></tr></thead>
+    <tbody>${data.results.map(c=>`<tr><td>${esc(c.name)}</td><td>${esc(c.email)}</td><td>${esc(c.phone)}</td><td>${esc(c.plan)}</td><td>${fmtDate(c.created_at)}</td></tr>`).join("")}</tbody></table></div>`;
 }
 
-async function addCustomer() {
-  clearErr("c-err"); clearErr("c-ok");
-  const name  = document.getElementById("c-name").value.trim();
-  const phone = document.getElementById("c-phone").value.trim();
-  if (!name || !phone) return showErr("c-err","Name and Phone are required");
-  const res = await api("POST", "/customers", {
-    name, phone,
-    email:   document.getElementById("c-email").value.trim(),
-    address: document.getElementById("c-addr").value.trim(),
-    plan:    document.getElementById("c-plan").value.trim(),
-    notes:   document.getElementById("c-notes").value.trim(),
-  });
-  if (res?.ok) {
-    const ok = document.getElementById("c-ok"); ok.textContent="✅ Customer saved!"; ok.classList.remove("hidden");
-    ["c-name","c-email","c-phone","c-plan","c-addr","c-notes"].forEach(id => document.getElementById(id).value="");
-  } else {
-    showErr("c-err", res?.error || "Failed to save");
-  }
+async function addCustomer(){
+  clearErr("c-err");clearErr("c-ok");
+  const name=document.getElementById("c-name").value.trim(),phone=document.getElementById("c-phone").value.trim();
+  if(!name||!phone)return showErr("c-err","Name and Phone required");
+  const res=await api("POST","/customers",{name,phone,email:document.getElementById("c-email").value.trim(),address:document.getElementById("c-addr").value.trim(),plan:document.getElementById("c-plan").value.trim(),notes:document.getElementById("c-notes").value.trim()});
+  if(res?.ok){document.getElementById("c-ok").textContent="✅ Saved!";document.getElementById("c-ok").classList.remove("hidden");["c-name","c-email","c-phone","c-plan","c-addr","c-notes"].forEach(id=>document.getElementById(id).value="");}
+  else showErr("c-err",res?.error||"Failed");
 }
 
-// ── Users (admin) ─────────────────────────────────────────────────────────────
-async function pageUsers(el) {
-  const data = await api("GET", "/users");
-  el.innerHTML = `
+/* ══════════ USERS (admin) — Add + Delete ══════════ */
+async function pageUsers(el){
+  const data=await api("GET","/users");
+  el.innerHTML=`
     <h2 class="page-title">🔑 Users</h2>
     <div class="section-card">
       <strong>Add User</strong>
       <div class="grid-2" style="margin-top:12px">
-        <div class="form-group"><label class="fl">Full Name *</label><input type="text" id="u-name"/></div>
+        <div class="form-group"><label class="fl">Name *</label><input type="text" id="u-name"/></div>
         <div class="form-group"><label class="fl">Email *</label><input type="email" id="u-email"/></div>
         <div class="form-group"><label class="fl">Password *</label><input type="password" id="u-pass"/></div>
-        <div class="form-group"><label class="fl">Role</label>
-          <select id="u-role"><option value="agent">Agent</option><option value="admin">Admin</option></select>
-        </div>
+        <div class="form-group"><label class="fl">Role</label><select id="u-role"><option value="agent">Agent</option><option value="admin">Admin</option></select></div>
       </div>
       <button class="btn btn-primary" onclick="addUser()">Add User</button>
-      <div class="err hidden" id="u-err"></div>
-      <div class="ok hidden" id="u-ok"></div>
+      <div class="err hidden" id="u-err"></div><div class="ok hidden" id="u-ok"></div>
     </div>
     <div class="section-card">
       <strong>All Users</strong>
       <div class="tbl-wrap" style="margin-top:12px"><table>
         <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Role</th><th>Active</th><th>Created</th><th>Actions</th></tr></thead>
-        <tbody id="users-tbody">${(data?.users||[]).map(u=>`
-          <tr>
-            <td>${u.id}</td><td>${esc(u.name)}</td><td>${esc(u.email)}</td>
-            <td><span class="badge badge-${u.role}">${u.role}</span></td>
-            <td>${u.is_active?'✅':'❌'}</td>
-            <td>${fmtDate(u.created_at)}</td>
-            <td><button class="btn btn-outline btn-sm" onclick="toggleUser(${u.id},${u.is_active})">${u.is_active?'Disable':'Enable'}</button></td>
-          </tr>`).join("")}
-        </tbody></table></div>
+        <tbody>${(data?.users||[]).map(u=>`<tr>
+          <td>${u.id}</td><td>${esc(u.name)}</td><td>${esc(u.email)}</td>
+          <td>${badge(u.role)}</td><td>${u.is_active?'✅':'❌'}</td>
+          <td style="white-space:nowrap">${fmtDate(u.created_at)}</td>
+          <td style="white-space:nowrap">
+            <button class="btn btn-outline btn-sm" onclick="toggleUser(${u.id},${u.is_active})">${u.is_active?'Disable':'Enable'}</button>
+            ${u.id!==currentUser.id?`<button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id},'${esc(u.name)}')">Delete</button>`:''}
+          </td></tr>`).join("")}</tbody></table></div>
     </div>`;
 }
 
-async function addUser() {
-  clearErr("u-err"); clearErr("u-ok");
-  const name = document.getElementById("u-name").value.trim();
-  const email= document.getElementById("u-email").value.trim();
-  const pass = document.getElementById("u-pass").value;
-  const role = document.getElementById("u-role").value;
-  if (!name||!email||!pass) return showErr("u-err","All fields required");
-  const res = await api("POST","/users",{name,email,password:pass,role});
-  if (res?.ok) {
-    const ok=document.getElementById("u-ok"); ok.textContent="✅ User created! Welcome email sent."; ok.classList.remove("hidden");
-    ["u-name","u-email","u-pass"].forEach(id=>document.getElementById(id).value="");
-    pageUsers(document.getElementById("content"));
-  } else showErr("u-err", res?.error||"Failed");
+async function addUser(){
+  clearErr("u-err");clearErr("u-ok");
+  const name=document.getElementById("u-name").value.trim(),email=document.getElementById("u-email").value.trim(),pass=document.getElementById("u-pass").value,role=document.getElementById("u-role").value;
+  if(!name||!email||!pass)return showErr("u-err","All fields required");
+  const res=await api("POST","/users",{name,email,password:pass,role});
+  if(res?.ok){document.getElementById("u-ok").textContent="✅ User created!";document.getElementById("u-ok").classList.remove("hidden");["u-name","u-email","u-pass"].forEach(id=>document.getElementById(id).value="");pageUsers(document.getElementById("content"));}
+  else showErr("u-err",res?.error||"Failed");
 }
 
-async function toggleUser(id, active) {
-  await api("PUT",`/users/${id}`,{is_active: active ? 0 : 1});
-  pageUsers(document.getElementById("content"));
+async function toggleUser(id,active){await api("PUT",`/users/${id}`,{is_active:active?0:1});pageUsers(document.getElementById("content"));}
+
+async function deleteUser(id,name){
+  if(!confirm(`DELETE user "${name}"? This cannot be undone.`))return;
+  const res=await api("DELETE",`/users/${id}`);
+  if(res?.ok)pageUsers(document.getElementById("content"));
+  else alert(res?.error||"Failed");
 }
 
-// ── Login Logs ────────────────────────────────────────────────────────────────
-async function pageLogs(el) {
-  const data = await api("GET","/users/logs?limit=200");
-  el.innerHTML = `
+/* ══════════ LOGIN LOGS ══════════ */
+async function pageLogs(el){
+  const data=await api("GET","/users/logs?limit=200");
+  el.innerHTML=`
     <h2 class="page-title">📋 Login Logs</h2>
-    <div class="section-card">
-    <div class="tbl-wrap"><table>
-      <thead><tr><th>User</th><th>Email</th><th>IP</th><th>Location</th><th>Device</th><th>Status</th><th>Time</th></tr></thead>
-      <tbody>${(data?.logs||[]).map(l=>`
-        <tr>
-          <td>${esc(l.name)}</td><td>${esc(l.email)}</td>
-          <td style="font-family:monospace">${esc(l.ip_address)}</td>
-          <td>${[l.city,l.region,l.country].filter(Boolean).join(", ")||"—"}</td>
-          <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:#64748b" title="${esc(l.user_agent)}">${esc(l.user_agent?.slice(0,60))}</td>
-          <td><span class="badge badge-${l.status==='success'?'closed':'open'}">${l.status}</span></td>
-          <td>${fmtDate(l.logged_at)}</td>
-        </tr>`).join("")||'<tr><td colspan="7" style="color:#64748b">No logs yet.</td></tr>'}
-      </tbody></table></div>
-    </div>`;
+    <div class="section-card"><div class="tbl-wrap"><table>
+      <thead><tr><th>User</th><th>Email</th><th>IP</th><th>Location</th><th>Status</th><th>Time</th></tr></thead>
+      <tbody>${(data?.logs||[]).map(l=>`<tr>
+        <td>${esc(l.name)}</td><td>${esc(l.email)}</td>
+        <td style="font-family:monospace;font-size:12px">${esc(l.ip_address)}</td>
+        <td>${[l.city,l.region,l.country].filter(Boolean).join(", ")||"—"}</td>
+        <td>${badge(l.status==='success'?'success':'open')}</td>
+        <td style="white-space:nowrap">${fmtDate(l.logged_at)}</td>
+      </tr>`).join("")||'<tr><td colspan="6" style="color:#64748b">No logs yet.</td></tr>'}</tbody></table></div></div>`;
 }
 
-// ─── Boot ─────────────────────────────────────────────────────────────────────
-// Check if user is already logged in via HttpOnly cookie
-(async function boot() {
-  try {
-    const res = await fetch(API + "/auth/me", { credentials: "include" });
-    if (res.ok) {
-      currentUser = await res.json();
-      initApp();
-    }
-  } catch {
-    // Not logged in or server down — show login screen
-  }
+/* ══════════ BOOT ══════════ */
+(async function(){
+  try{
+    const res=await fetch(API+"/auth/me",{credentials:"include"});
+    if(res.ok){currentUser=await res.json();initApp();return;}
+  }catch{}
+  document.getElementById("auth-screen").style.display="";
 })();
 </script>
 </body>

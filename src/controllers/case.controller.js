@@ -26,6 +26,7 @@ exports.createFromContact = async (req, res) => {
     if (name.length > 150) return res.status(400).json({ error: "Name too long" });
     if (message.length > 5000) return res.status(400).json({ error: "Message too long (max 5000 chars)" });
     if (subject && subject.length > 255) return res.status(400).json({ error: "Subject too long" });
+    if (phone && !/^[\d\s\-+().]+$/.test(phone)) return res.status(400).json({ error: "Phone must contain only digits and standard characters" });
 
     const { id, caseId } = await Case.create({
       name, email,
@@ -80,9 +81,25 @@ exports.createFromContact = async (req, res) => {
 
 exports.listCases = async (req, res) => {
   try {
-    const { status, page, limit } = req.query;
-    const data = await Case.listAll({ status, page: parseInt(page) || 1, limit: parseInt(limit) || 50 });
+    const { status, search, page, limit } = req.query;
+    const data = await Case.listAll({ status, search, page: parseInt(page) || 1, limit: parseInt(limit) || 50 });
     res.json(data);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+};
+
+// Admin — create ticket manually from CRM
+exports.createManual = async (req, res) => {
+  try {
+    const { name, email, phone, subject, message } = req.body;
+    if (!name || !email || !message) return res.status(400).json({ error: "name, email and message required" });
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) return res.status(400).json({ error: "Invalid email" });
+    if (phone && !/^[\d\s\-+().]+$/.test(phone)) return res.status(400).json({ error: "Phone must contain only digits" });
+    const { caseId } = await Case.create({ name, email, phone: phone || "N/A", subject: subject || "Manual Ticket", message, source: "crm_manual" });
+    res.status(201).json({ ok: true, caseId });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Server error" });

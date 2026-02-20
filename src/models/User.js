@@ -31,6 +31,12 @@ const User = {
   async saveOtpSecret(id, secret) {
     await db.query("UPDATE users SET otp_secret = ? WHERE id = ?", [secret, id]);
   },
+  async delete(id) {
+    await db.query("DELETE FROM otp_codes WHERE user_id = ?", [id]);
+    await db.query("DELETE FROM login_logs WHERE user_id = ?", [id]);
+    await db.query("UPDATE cases SET assigned_to = NULL WHERE assigned_to = ?", [id]);
+    await db.query("DELETE FROM users WHERE id = ?", [id]);
+  },
 };
 
 module.exports = User;

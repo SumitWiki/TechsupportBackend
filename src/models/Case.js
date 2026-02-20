@@ -37,11 +37,17 @@ const Case = {
     );
     return rows[0] || null;
   },
-  async listAll({ status, page = 1, limit = 50 }) {
+  async listAll({ status, search, page = 1, limit = 50 }) {
     const offset = (page - 1) * limit;
-    let where = "";
+    const conditions = [];
     const params = [];
-    if (status) { where = "WHERE c.status = ?"; params.push(status); }
+    if (status) { conditions.push("c.status = ?"); params.push(status); }
+    if (search) {
+      conditions.push("(c.case_id LIKE ? OR c.email LIKE ? OR c.name LIKE ? OR c.phone LIKE ?)");
+      const s = `%${search}%`;
+      params.push(s, s, s, s);
+    }
+    const where = conditions.length ? "WHERE " + conditions.join(" AND ") : "";
     const [rows] = await db.query(
       `SELECT c.*, u.name as agent_name FROM cases c
        LEFT JOIN users u ON u.id = c.assigned_to

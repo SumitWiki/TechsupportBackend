@@ -100,6 +100,20 @@ exports.getLoginLogs = async (req, res) => {
   }
 };
 
+exports.deleteUser = async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (id === req.user.id) return res.status(400).json({ error: "Cannot delete yourself" });
+    const user = await User.findById(id);
+    if (!user) return res.status(404).json({ error: "User not found" });
+    await User.delete(id);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+};
+
 exports.getMyLogs = async (req, res) => {
   try {
     const logs = await LoginLog.forUser(req.user.id);

@@ -11,6 +11,7 @@ router.use(authMw);
 
 router.get  ("/",                     ctrl.listCases);
 router.get  ("/stats",                ctrl.stats);
+router.post ("/manual",               requireAdmin, ctrl.createManual);  // admin manual ticket
 router.get  ("/:caseId",              ctrl.getCase);
 router.put  ("/:caseId/close",        ctrl.closeCase);
 router.put  ("/:caseId/reopen",       ctrl.reopenCase);
