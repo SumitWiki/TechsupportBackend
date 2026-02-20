@@ -19,6 +19,16 @@ const isConfigured =
   !process.env.SMTP_PASS.includes("your_");
 
 /**
+ * Build the "from" address.
+ * Priority: EMAIL_FROM env  →  SMTP_USER (ensures relay is allowed)
+ */
+function getFrom() {
+  if (process.env.EMAIL_FROM) return process.env.EMAIL_FROM;
+  if (process.env.SMTP_USER) return `"TechSupport4" <${process.env.SMTP_USER}>`;
+  return '"TechSupport4" <no-reply@techsupport4.com>';
+}
+
+/**
  * Send an email. Silently skips if SMTP is not configured.
  */
 async function sendMail({ to, subject, html, text }) {
@@ -27,7 +37,7 @@ async function sendMail({ to, subject, html, text }) {
     return { skipped: true };
   }
   return transporter.sendMail({
-    from:    process.env.EMAIL_FROM || '"TechSupport4" <no-reply@techsupport4.com>',
+    from: getFrom(),
     to,
     subject,
     html,

@@ -7,7 +7,7 @@ const mysql  = require("mysql2/promise");
 const bcrypt = require("bcryptjs");
 
 const NEW_PASSWORD = "Admin@1234";
-const ADMIN_EMAIL  = "admin@techsupport4.com";
+const ADMIN_EMAIL  = "support@techsupport4.com";
 
 async function fix() {
   console.log("=== DB CONFIG ===");

@@ -27,7 +27,7 @@ async function setup() {
     console.log("⏳ Running schema.sql …");
     await conn.query(sql);
     console.log("✅ Database & tables created successfully!");
-    console.log("   Default admin email: admin@techsupport4.com");
+    console.log("   Default admin email: support@techsupport4.com");
     console.log("   ⚠️  Change the default admin password immediately after first login!");
   } catch (err) {
     console.error("❌ Setup failed:", err.message);

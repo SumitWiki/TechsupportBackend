@@ -86,7 +86,7 @@ input[type=search]{width:100%;max-width:360px}
   <div class="auth-card" id="login-form">
     <h1>TechSupport4 CRM</h1>
     <p>Sign in to your account</p>
-    <div class="form-group"><label class="fl">Email</label><input type="email" id="a-email" placeholder="admin@techsupport4.com"/></div>
+    <div class="form-group"><label class="fl">Email</label><input type="email" id="a-email" placeholder="support@techsupport4.com"/></div>
     <div class="form-group"><label class="fl">Password</label><input type="password" id="a-pass" placeholder="••••••••"/></div>
     <button class="btn btn-primary" style="width:100%" onclick="doLogin()">Continue →</button>
     <div class="err hidden" id="a-err"></div>
@@ -125,15 +125,15 @@ input[type=search]{width:100%;max-width:360px}
 <script>
 // ─── State ───────────────────────────────────────────────────────────────────
 const API   = "/api";
-let token   = localStorage.getItem("crm_token") || "";
-let currentUser = JSON.parse(localStorage.getItem("crm_user") || "null");
+let currentUser = null;
 let pendingUserId = null;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 async function api(method, path, body) {
   const r = await fetch(API + path, {
     method,
-    headers: { "Content-Type":"application/json", ...(token ? {"Authorization":"Bearer "+token} : {}) },
+    headers: { "Content-Type":"application/json" },
+    credentials: "include",
     body: body ? JSON.stringify(body) : undefined,
   });
   if (r.status === 401) { doLogout(); return; }
@@ -153,7 +153,12 @@ async function doLogin() {
   const pass  = document.getElementById("a-pass").value;
   if (!email || !pass) return showErr("a-err","Enter email and password");
   const btn = document.querySelector("#login-form .btn"); btn.disabled=true; btn.textContent="Sending OTP…";
-  const res = await fetch(API+"/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,password:pass})});
+  const res = await fetch(API+"/auth/login",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    credentials:"include",
+    body:JSON.stringify({email,password:pass})
+  });
   const data = await res.json();
   btn.disabled=false; btn.textContent="Continue →";
   if (!res.ok) return showErr("a-err", data.error || "Login failed");
@@ -168,20 +173,24 @@ async function doVerifyOtp() {
   const otp = document.getElementById("a-otp").value.trim();
   if (otp.length !== 6) return showErr("otp-err","Enter the 6-digit code");
   const btn = document.querySelector("#otp-form .btn"); btn.disabled=true; btn.textContent="Verifying…";
-  const res = await fetch(API+"/auth/verify-otp",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({userId:pendingUserId,otp})});
+  const res = await fetch(API+"/auth/verify-otp",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    credentials:"include",
+    body:JSON.stringify({userId:pendingUserId,otp})
+  });
   const data = await res.json();
   btn.disabled=false; btn.textContent="Verify & Login";
   if (!res.ok) return showErr("otp-err", data.error || "Invalid OTP");
-  token = data.token; currentUser = data.user;
-  localStorage.setItem("crm_token", token);
-  localStorage.setItem("crm_user", JSON.stringify(currentUser));
+  // Cookie is set automatically by the server (HttpOnly)
+  currentUser = data.user;
   initApp();
 }
 
 function doLogout() {
-  token=""; currentUser=null;
-  localStorage.removeItem("crm_token");
-  localStorage.removeItem("crm_user");
+  // Call logout API — server clears the HttpOnly cookie
+  fetch(API+"/auth/logout",{method:"POST",credentials:"include"}).catch(()=>{});
+  currentUser=null;
   location.reload();
 }
 
@@ -484,9 +493,18 @@ async function pageLogs(el) {
 }
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
-if (token && currentUser) {
-  initApp();
-}
+// Check if user is already logged in via HttpOnly cookie
+(async function boot() {
+  try {
+    const res = await fetch(API + "/auth/me", { credentials: "include" });
+    if (res.ok) {
+      currentUser = await res.json();
+      initApp();
+    }
+  } catch {
+    // Not logged in or server down — show login screen
+  }
+})();
 </script>
 </body>
 </html>

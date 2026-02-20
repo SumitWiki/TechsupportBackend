@@ -1,9 +1,10 @@
 require("dotenv").config();
-const express     = require("express");
-const cors        = require("cors");
-const helmet      = require("helmet");
-const path        = require("path");
-const rateLimit   = require("express-rate-limit");
+const express      = require("express");
+const cors         = require("cors");
+const helmet       = require("helmet");
+const cookieParser = require("cookie-parser");
+const path         = require("path");
+const rateLimit    = require("express-rate-limit");
 
 // ─── VALIDATE REQUIRED ENV VARS ───────────────────────────────────────────────
 const requiredEnv = ["JWT_SECRET", "DB_HOST", "DB_USER", "DB_PASSWORD", "DB_NAME"];
@@ -32,6 +33,9 @@ app.use(cors({
   origin: allowedOrigins.length > 0 ? allowedOrigins : "http://localhost:3000",
   credentials: true,
 }));
+
+// ─── COOKIE PARSER ────────────────────────────────────────────────────────────
+app.use(cookieParser());
 
 // ─── BODY PARSERS (with size limits) ──────────────────────────────────────────
 app.use(express.json({ limit: "1mb" }));

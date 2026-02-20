@@ -145,14 +145,24 @@ exports.verifyOtp = async (req, res) => {
     });
 
     // Issue JWT — NO fallback secret, env must be set
+    const expiresIn = process.env.JWT_EXPIRES_IN || "8h";
     const token = jwt.sign(
       { id: user.id, email: user.email, role: user.role, name: user.name },
       process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN || "8h" }
+      { expiresIn }
     );
 
+    // ── Set JWT as HttpOnly cookie (NOT in response body) ──────────────────
+    const maxAgeMs = parseMaxAge(expiresIn);
+    res.cookie("auth_token", token, {
+      httpOnly:  true,
+      secure:    process.env.NODE_ENV === "production",
+      sameSite:  "Strict",
+      maxAge:    maxAgeMs,
+      path:      "/",
+    });
+
     return res.json({
-      token,
       user: { id: user.id, name: user.name, email: user.email, role: user.role },
     });
   } catch (err) {
@@ -161,16 +171,37 @@ exports.verifyOtp = async (req, res) => {
   }
 };
 
-// ── Logout (blacklist token) ──────────────────────────────────────────────────
+// ── Logout (blacklist token + clear cookie) ──────────────────────────────────
 exports.logout = (req, res) => {
   if (req.token) {
     global._tokenBlacklist.add(req.token);
-    // Auto-cleanup: remove token from blacklist after JWT_EXPIRES_IN
     const expiresMs = (req.user?.exp ? req.user.exp * 1000 - Date.now() : 8 * 60 * 60 * 1000);
     setTimeout(() => global._tokenBlacklist.delete(req.token), Math.max(expiresMs, 0));
   }
+
+  // Clear the HttpOnly auth cookie
+  res.clearCookie("auth_token", {
+    httpOnly:  true,
+    secure:    process.env.NODE_ENV === "production",
+    sameSite:  "Strict",
+    path:      "/",
+  });
+
   res.json({ message: "Logged out successfully" });
 };
+
+/** Parse JWT expiresIn string (e.g. "8h", "1d", "30m") to milliseconds */
+function parseMaxAge(expiresIn) {
+  const match = String(expiresIn).match(/^(\d+)([smhd])$/);
+  if (!match) return 8 * 60 * 60 * 1000; // default 8h
+  const val = parseInt(match[1]);
+  const unit = match[2];
+  if (unit === "s") return val * 1000;
+  if (unit === "m") return val * 60 * 1000;
+  if (unit === "h") return val * 60 * 60 * 1000;
+  if (unit === "d") return val * 24 * 60 * 60 * 1000;
+  return 8 * 60 * 60 * 1000;
+}
 
 // ── Whoami ────────────────────────────────────────────────────────────────────
 exports.me = async (req, res) => {
