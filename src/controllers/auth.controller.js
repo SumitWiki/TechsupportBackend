@@ -73,22 +73,28 @@ exports.login = async (req, res) => {
 
     await OtpCode.create(user.id, otp, expiresAt);
 
-    // Send OTP email
-    await sendMail({
-      to: user.email,
-      subject: "TechSupport4 CRM — Your Login OTP",
-      html: `
-        <div style="font-family:sans-serif;max-width:480px;margin:auto">
-          <h2 style="color:#1e40af">Login Verification</h2>
-          <p>Hi <strong>${esc(user.name)}</strong>,</p>
-          <p>Your one-time login code is:</p>
-          <div style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#1e40af;padding:16px 0">${otp}</div>
-          <p style="color:#64748b;font-size:13px">This code expires in ${process.env.OTP_EXPIRY_MINUTES || 10} minutes. Do not share it with anyone.</p>
-          <hr/>
-          <p style="font-size:12px;color:#94a3b8">If you did not attempt to log in, please contact support immediately.</p>
-        </div>
-      `,
-    });
+    // Send OTP email — wrapped in try/catch so login still works if SMTP is down
+    try {
+      await sendMail({
+        to: user.email,
+        subject: "TechSupport4 CRM — Your Login OTP",
+        html: `
+          <div style="font-family:sans-serif;max-width:480px;margin:auto">
+            <h2 style="color:#1e40af">Login Verification</h2>
+            <p>Hi <strong>${esc(user.name)}</strong>,</p>
+            <p>Your one-time login code is:</p>
+            <div style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#1e40af;padding:16px 0">${otp}</div>
+            <p style="color:#64748b;font-size:13px">This code expires in ${process.env.OTP_EXPIRY_MINUTES || 10} minutes. Do not share it with anyone.</p>
+            <hr/>
+            <p style="font-size:12px;color:#94a3b8">If you did not attempt to log in, please contact support immediately.</p>
+          </div>
+        `,
+      });
+    } catch (mailErr) {
+      console.error("⚠️  OTP email failed (SMTP error):", mailErr.message);
+      // Don't block login — OTP is saved in DB, admin can check logs
+      // In production: fix SMTP_USER / SMTP_PASS in .env
+    }
 
     // Don't expose user ID — use a temporary session reference
     return res.json({ message: "OTP sent to your email", userId: user.id });

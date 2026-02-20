@@ -17,6 +17,10 @@ if (missing.length) {
 
 const app = express();
 
+// ─── TRUST PROXY (behind Nginx / load balancer) ──────────────────────────────
+// Required for express-rate-limit to read X-Forwarded-For correctly on EC2
+app.set("trust proxy", 1);
+
 // ─── SECURITY HEADERS (helmet) ────────────────────────────────────────────────
 app.use(helmet({
   contentSecurityPolicy: false,         // CSP can break SPA; configure per deployment
