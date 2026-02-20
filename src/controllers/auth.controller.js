@@ -206,5 +206,12 @@ function parseMaxAge(expiresIn) {
 // ── Whoami ────────────────────────────────────────────────────────────────────
 exports.me = async (req, res) => {
   const user = await User.findById(req.user.id);
-  res.json(user);
+  if (!user) return res.status(401).json({ error: "User not found" });
+  res.json({
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    permissions: user.permissions || { read: true, write: false, modify: false, delete: false },
+  });
 };

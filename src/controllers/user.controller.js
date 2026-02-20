@@ -15,7 +15,7 @@ exports.listUsers = async (_req, res) => {
 
 exports.createUser = async (req, res) => {
   try {
-    const { name, email, password, role } = req.body;
+    const { name, email, password, role, permissions } = req.body;
     if (!name || !email || !password) return res.status(400).json({ error: "name, email, password required" });
 
     // Password strength validation
@@ -27,12 +27,19 @@ exports.createUser = async (req, res) => {
     const existing = await User.findByEmail(email.toLowerCase().trim());
     if (existing) return res.status(409).json({ error: "Email already exists" });
 
+    // Build permissions — admin gets all, agents get what's specified
+    const defaultPerms = { read: true, write: false, modify: false, delete: false };
+    const finalPerms = role === 'admin'
+      ? { read: true, write: true, modify: true, delete: true }
+      : { ...defaultPerms, ...(permissions || {}) };
+
     const password_hash = await bcrypt.hash(password, 12);
     const id = await User.create({
       name,
       email:         email.toLowerCase().trim(),
       password_hash,
       role:          role || "agent",
+      permissions:   finalPerms,
       created_by:    req.user.id,
     });
 
@@ -63,7 +70,7 @@ exports.createUser = async (req, res) => {
 
 exports.updateUser = async (req, res) => {
   try {
-    const { name, email, role, is_active, password } = req.body;
+    const { name, email, role, is_active, password, permissions } = req.body;
     const fields = {};
     if (name)      fields.name      = name;
     if (email) {
@@ -77,6 +84,7 @@ exports.updateUser = async (req, res) => {
     }
     if (role)      fields.role      = role;
     if (is_active !== undefined) fields.is_active = is_active ? 1 : 0;
+    if (permissions && typeof permissions === 'object') fields.permissions = permissions;
     if (password) {
       if (password.length < 8) return res.status(400).json({ error: "Password must be at least 8 characters" });
       if (!/[A-Z]/.test(password)) return res.status(400).json({ error: "Password must contain an uppercase letter" });

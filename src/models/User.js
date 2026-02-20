@@ -6,26 +6,29 @@ const User = {
     return rows[0] || null;
   },
   async findById(id) {
-    const [rows] = await db.query("SELECT id,name,email,role,is_active,created_at FROM users WHERE id = ? LIMIT 1", [id]);
+    const [rows] = await db.query("SELECT id,name,email,role,permissions,is_active,created_at FROM users WHERE id = ? LIMIT 1", [id]);
+    if (rows[0] && typeof rows[0].permissions === 'string') rows[0].permissions = JSON.parse(rows[0].permissions);
     return rows[0] || null;
   },
   async findAll() {
-    const [rows] = await db.query("SELECT id,name,email,role,is_active,created_at FROM users ORDER BY created_at DESC");
+    const [rows] = await db.query("SELECT id,name,email,role,permissions,is_active,created_at FROM users ORDER BY created_at DESC");
+    rows.forEach(r => { if (typeof r.permissions === 'string') r.permissions = JSON.parse(r.permissions); });
     return rows;
   },
-  async create({ name, email, password_hash, role, created_by }) {
+  async create({ name, email, password_hash, role, permissions, created_by }) {
+    const perms = JSON.stringify(permissions || { read: true, write: false, modify: false, delete: false });
     const [result] = await db.query(
-      "INSERT INTO users (name,email,password_hash,role,created_by) VALUES (?,?,?,?,?)",
-      [name, email, password_hash, role || "agent", created_by || null]
+      "INSERT INTO users (name,email,password_hash,role,permissions,created_by) VALUES (?,?,?,?,?,?)",
+      [name, email, password_hash, role || "agent", perms, created_by || null]
     );
     return result.insertId;
   },
   async update(id, fields) {
-    const allowed = ["name", "email", "role", "is_active", "password_hash"];
+    const allowed = ["name", "email", "role", "is_active", "password_hash", "permissions"];
     const keys = Object.keys(fields).filter((k) => allowed.includes(k));
     if (!keys.length) return;
     const set = keys.map((k) => `${k} = ?`).join(", ");
-    const vals = keys.map((k) => fields[k]);
+    const vals = keys.map((k) => k === 'permissions' ? JSON.stringify(fields[k]) : fields[k]);
     await db.query(`UPDATE users SET ${set} WHERE id = ?`, [...vals, id]);
   },
   async saveOtpSecret(id, secret) {

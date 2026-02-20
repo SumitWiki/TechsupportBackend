@@ -1,4 +1,5 @@
 const Case = require("../models/Case");
+const AuditLog = require("../models/AuditLog");
 const { sendMail } = require("../config/mailer");
 
 /** HTML-escape to prevent XSS in emails */
@@ -121,7 +122,9 @@ exports.closeCase = async (req, res) => {
   try {
     const c = await Case.findByCaseId(req.params.caseId);
     if (!c) return res.status(404).json({ error: "Not found" });
+    const oldStatus = c.status;
     await Case.updateStatus(c.id, "closed");
+    await AuditLog.record({ caseId: c.id, userId: req.user.id, action: "status_change", oldStatus, newStatus: "closed" });
     res.json({ ok: true, status: "closed" });
   } catch (err) {
     res.status(500).json({ error: "Server error" });
@@ -132,7 +135,9 @@ exports.reopenCase = async (req, res) => {
   try {
     const c = await Case.findByCaseId(req.params.caseId);
     if (!c) return res.status(404).json({ error: "Not found" });
+    const oldStatus = c.status;
     await Case.updateStatus(c.id, "reopened");
+    await AuditLog.record({ caseId: c.id, userId: req.user.id, action: "status_change", oldStatus, newStatus: "reopened" });
     res.json({ ok: true, status: "reopened" });
   } catch (err) {
     res.status(500).json({ error: "Server error" });
@@ -143,7 +148,9 @@ exports.assignCase = async (req, res) => {
   try {
     const c = await Case.findByCaseId(req.params.caseId);
     if (!c) return res.status(404).json({ error: "Not found" });
+    const oldStatus = c.status;
     await Case.assign(c.id, req.body.userId);
+    await AuditLog.record({ caseId: c.id, userId: req.user.id, action: "assigned", oldStatus, newStatus: "in_progress", note: `Assigned to user ${req.body.userId}` });
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: "Server error" });
@@ -166,6 +173,26 @@ exports.stats = async (_req, res) => {
   try {
     const data = await Case.stats();
     res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: "Server error" });
+  }
+};
+
+exports.getAuditLog = async (req, res) => {
+  try {
+    const c = await Case.findByCaseId(req.params.caseId);
+    if (!c) return res.status(404).json({ error: "Not found" });
+    const logs = await AuditLog.forCase(c.id);
+    res.json({ logs });
+  } catch (err) {
+    res.status(500).json({ error: "Server error" });
+  }
+};
+
+exports.recentAudit = async (req, res) => {
+  try {
+    const logs = await AuditLog.recent(parseInt(req.query.limit) || 200);
+    res.json({ logs });
   } catch (err) {
     res.status(500).json({ error: "Server error" });
   }
