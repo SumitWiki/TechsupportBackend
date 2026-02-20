@@ -113,6 +113,6 @@ INSERT IGNORE INTO users (name, email, password_hash, role)
 VALUES (
   'Super Admin',
   'admin@techsupport4.com',
-  '$2a$10$7QJ8kqZ1vF5cT3mN9wXuBOy6sLpRe4gHdMjKiIbUWeVoYtCxAN0Ry',
+  '$2a$12$b2ksHikEOTd009WWy0yM0.AurlmG753BmakQlU7gHrIm6nFE0jOIW',
   'admin'
 );
