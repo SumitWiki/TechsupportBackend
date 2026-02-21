@@ -16,6 +16,8 @@ function esc(str) {
 // Public — called from contact form (Next.js frontend)
 exports.createFromContact = async (req, res) => {
   try {
+    console.log("📩 [createFromContact] Received request:", { name: req.body.name, email: req.body.email, phone: req.body.phone });
+    
     const { name, email, phone, subject, message } = req.body;
     if (!name || !email || !message) return res.status(400).json({ error: "name, email and message are required" });
 
@@ -36,6 +38,8 @@ exports.createFromContact = async (req, res) => {
       message,
       source:  "contact_form",
     });
+    
+    console.log(`✅ [createFromContact] Case created in DB: ${caseId} (ID: ${id})`);
 
     // Email to admin — all user data HTML-escaped
     await sendMail({

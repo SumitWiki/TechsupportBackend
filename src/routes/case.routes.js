@@ -7,6 +7,16 @@ const { requirePerm, requireSuperAdmin } = require("../middleware/role.middlewar
 // Public — contact form submits here
 router.post("/contact", ctrl.createFromContact);
 
+// Public — health check for CRM contact API
+router.get("/contact/health", (req, res) => {
+  res.json({ 
+    ok: true, 
+    message: "CRM Contact API is reachable",
+    timestamp: new Date().toISOString(),
+    dbConfigured: !!(process.env.DB_HOST && process.env.DB_NAME)
+  });
+});
+
 // All the rest require login
 router.use(authMw);
 
