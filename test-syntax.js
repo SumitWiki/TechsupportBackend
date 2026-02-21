@@ -1,0 +1,685 @@
+
+/* ── Block console API access in production ── */
+(function(){
+  if(location.hostname!=="localhost"&&location.hostname!=="127.0.0.1"){
+    ["log","warn","info","debug","table","dir","trace","clear"].forEach(function(m){
+      console[m]=function(){};
+    });
+  }
+})();
+
+/* ══════════════════════════════════════════════════════════════════════════
+   STATE
+   ══════════════════════════════════════════════════════════════════════ */
+const API="/api";
+let currentUser=null;
+let pendingUserId=null;
+let casesPage=1;
+const PER_PAGE=20;
+let _pollTimer=null;
+let _currentPage="dashboard";
+
+/* ══════════════════════════════════════════════════════════════════════════
+   HELPERS
+   ══════════════════════════════════════════════════════════════════════ */
+async function api(method,path,body){
+  const r=await fetch(API+path,{method,headers:{"Content-Type":"application/json"},credentials:"include",body:body?JSON.stringify(body):undefined});
+  if(r.status===401){doLogout();return null;}
+  if(r.status===403){const d=await r.json();alert(d.error||"Permission denied");return null;}
+  return r.json();
+}
+function showErr(id,msg){const el=document.getElementById(id);if(el){el.textContent=msg;el.classList.remove("hidden");}}
+function clearErr(id){const el=document.getElementById(id);if(el){el.textContent="";el.classList.add("hidden");}}
+function badge(s){return`<span class="badge badge-${s}">${(s||'').replace(/_/g," ")}</span>`;}
+function fmtDate(d){return d?new Date(d).toLocaleString("en-IN",{dateStyle:"medium",timeStyle:"short"}):"—";}
+function esc(s){return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+function toggleEl(id){document.getElementById(id).classList.toggle("hidden");}
+
+/* Permission checks (client-side for UI only; backend enforces) */
+function canRead(){return isSuperAdmin()||currentUser?.role==='admin'||currentUser?.permissions?.read;}
+function canWrite(){return isSuperAdmin()||currentUser?.role==='admin'||currentUser?.permissions?.write;}
+function canModify(){return isSuperAdmin()||currentUser?.role==='admin'||currentUser?.permissions?.modify;}
+function canDelete(){return isSuperAdmin()||currentUser?.role==='admin'||currentUser?.permissions?.delete;}
+function isAdmin(){return isSuperAdmin()||currentUser?.role==='admin'||currentUser?.role==='super_admin';}
+function isSuperAdmin(){return currentUser?.isSuperAdmin||currentUser?.role==='super_admin'||currentUser?.email?.toLowerCase()==='support@techsupport4.com';}
+
+/* ── Mobile sidebar ── */
+function toggleSidebar(){
+  document.getElementById("sidebar").classList.toggle("open");
+  document.getElementById("sidebar-overlay").classList.toggle("open");
+}
+
+/* ── Auto-polling (10-sec) ── */
+function startPolling(){
+  stopPolling();
+  _pollTimer=setInterval(()=>{
+    if(_currentPage==="dashboard")pageDashboard(document.getElementById("content"),true);
+    if(_currentPage==="cases")filterCases(true);
+  },10000);
+}
+function stopPolling(){if(_pollTimer){clearInterval(_pollTimer);_pollTimer=null;}}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   AUTH
+   ══════════════════════════════════════════════════════════════════════ */
+async function doLogin(){
+  clearErr("a-err");
+  const email=document.getElementById("a-email").value.trim();
+  const pass=document.getElementById("a-pass").value;
+  if(!email||!pass)return showErr("a-err","Enter email and password");
+  const btn=document.querySelector("#login-form .btn");btn.disabled=true;btn.textContent="Sending OTP…";
+  try{
+    const res=await fetch(API+"/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"include",body:JSON.stringify({email,password:pass})});
+    const data=await res.json();
+    btn.disabled=false;btn.textContent="Continue →";
+    if(!res.ok)return showErr("a-err",data.error||"Login failed");
+    pendingUserId=data.userId;
+    document.getElementById("otp-hint").textContent=`Code sent to ${email}`;
+    document.getElementById("login-form").classList.add("hidden");
+    document.getElementById("otp-form").classList.remove("hidden");
+  }catch(e){btn.disabled=false;btn.textContent="Continue →";showErr("a-err","Network error");}
+}
+
+async function doVerifyOtp(){
+  clearErr("otp-err");
+  const otp=document.getElementById("a-otp").value.trim();
+  if(otp.length!==6)return showErr("otp-err","Enter the 6-digit code");
+  const btn=document.querySelector("#otp-form .btn");btn.disabled=true;btn.textContent="Verifying…";
+  try{
+    const res=await fetch(API+"/auth/verify-otp",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"include",body:JSON.stringify({userId:pendingUserId,otp})});
+    const data=await res.json();
+    btn.disabled=false;btn.textContent="Verify & Login";
+    if(!res.ok)return showErr("otp-err",data.error||"Invalid OTP");
+    currentUser=data.user;
+    /* Fetch full user with permissions from /me */
+    const me=await fetch(API+"/auth/me",{credentials:"include"});
+    if(me.ok)currentUser=await me.json();
+    initApp();
+  }catch(e){btn.disabled=false;btn.textContent="Verify & Login";showErr("otp-err","Network error");}
+}
+
+function doLogout(){
+  stopPolling();
+  fetch(API+"/auth/logout",{method:"POST",credentials:"include"}).catch(()=>{});
+  currentUser=null;
+  location.reload();
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   APP INIT
+   ══════════════════════════════════════════════════════════════════════ */
+function initApp(){
+  document.getElementById("auth-screen").style.display="none";
+  document.getElementById("app").classList.remove("hidden");
+  const roleLabel=isSuperAdmin()?'🔐 super admin':(currentUser.role==='admin'?'👑 admin':currentUser.role);
+  document.getElementById("user-info").textContent=`${currentUser.name} (${roleLabel})`;
+
+  // Show admin menu items for admins and super admins
+  if(!isAdmin())document.querySelectorAll(".admin-only").forEach(el=>el.classList.add("hidden"));
+
+  document.querySelectorAll("#sidebar .nav-item").forEach(item=>{
+    item.addEventListener("click",()=>{
+      document.querySelectorAll("#sidebar .nav-item").forEach(i=>i.classList.remove("active"));
+      item.classList.add("active");
+      loadPage(item.dataset.page);
+      document.getElementById("sidebar").classList.remove("open");
+      document.getElementById("sidebar-overlay").classList.remove("open");
+    });
+  });
+  loadPage("dashboard");
+  startPolling();
+}
+
+async function loadPage(name){
+  _currentPage=name;
+  const el=document.getElementById("content");
+  el.innerHTML='<p style="color:#64748b;padding:24px">Loading…</p>';
+  if(name==="dashboard")await pageDashboard(el);
+  if(name==="cases")await pageCases(el);
+  if(name==="customers")await pageCustomers(el);
+  if(name==="users")await pageUsers(el);
+  if(name==="audit")await pageAudit(el);
+  if(name==="logs")await pageLogs(el);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   DASHBOARD — auto-refreshes every 10s
+   ══════════════════════════════════════════════════════════════════════ */
+async function pageDashboard(el,silent){
+  const s=await api("GET","/cases/stats");
+  if(!s)return;
+  if(!silent)el=document.getElementById("content");
+  const roleDisplay = isSuperAdmin() ? '🔐 Super Admin' : (currentUser.role === 'admin' ? '👑 Admin' : '👤 ' + currentUser.role);
+  el.innerHTML=`
+    <h2 class="page-title"><span class="live-dot"></span> Dashboard (Live)</h2>
+    <div class="stat-grid">
+      <div class="stat-card"><div class="val">${s.total||0}</div><div class="lbl">Total Cases</div></div>
+      <div class="stat-card"><div class="val" style="color:#60a5fa">${s.open||0}</div><div class="lbl">Open</div></div>
+      <div class="stat-card"><div class="val" style="color:#a78bfa">${s.in_progress||0}</div><div class="lbl">In Progress</div></div>
+      <div class="stat-card"><div class="val" style="color:#6ee7b7">${s.closed||0}</div><div class="lbl">Closed</div></div>
+      <div class="stat-card"><div class="val" style="color:#fbbf24">${s.reopened||0}</div><div class="lbl">Reopened</div></div>
+    </div>
+    <div class="section-card">
+      <p style="color:#64748b;font-size:14px">Welcome back, <strong style="color:#f1f5f9">${esc(currentUser.name)}</strong> ${roleDisplay}</p>
+      <p style="color:#475569;font-size:12px;margin-top:4px">Your permissions: ${Object.entries(currentUser.permissions||{}).filter(([,v])=>v).map(([k])=>`<span class="badge badge-success">${k}</span>`).join(" ")||'read-only'}</p>
+      <p style="color:#64748b;font-size:12px;margin-top:8px">Auto-refreshes every 10 seconds.</p>
+    </div>
+    <div class="section-card">
+      <strong>🔒 Account Security</strong>
+      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" onclick="showChangePasswordModal()">Change My Password</button>
+      </div>
+    </div>
+    <div id="change-pwd-modal" class="section-card hidden">
+      <strong>Change My Password</strong>
+      <div style="margin-top:12px">
+        <div class="form-group"><label class="fl">Current Password *</label><input type="password" id="cp-current"/></div>
+        <div class="form-group"><label class="fl">New Password *</label><input type="password" id="cp-new"/></div>
+        <div class="form-group"><label class="fl">Confirm New Password *</label><input type="password" id="cp-confirm"/></div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" onclick="changeMyPassword()">Change Password</button>
+        <button class="btn btn-outline btn-sm" onclick="toggleEl('change-pwd-modal')">Cancel</button>
+      </div>
+      <div class="err hidden" id="cp-err"></div>
+      <div class="ok hidden" id="cp-ok"></div>
+    </div>`;
+}
+
+function showChangePasswordModal(){
+  document.getElementById("change-pwd-modal").classList.remove("hidden");
+  document.getElementById("cp-current").value="";
+  document.getElementById("cp-new").value="";
+  document.getElementById("cp-confirm").value="";
+  clearErr("cp-err");clearErr("cp-ok");
+}
+
+async function changeMyPassword(){
+  clearErr("cp-err");clearErr("cp-ok");
+  const current=document.getElementById("cp-current").value;
+  const newPwd=document.getElementById("cp-new").value;
+  const confirm=document.getElementById("cp-confirm").value;
+  if(!current||!newPwd||!confirm)return showErr("cp-err","All fields are required");
+  if(newPwd!==confirm)return showErr("cp-err","New passwords do not match");
+  if(newPwd.length<8)return showErr("cp-err","Password must be at least 8 characters");
+  const res=await api("PUT","/users/me/password",{currentPassword:current,newPassword:newPwd});
+  if(res?.ok){
+    document.getElementById("cp-ok").textContent="✅ Password changed successfully!";
+    document.getElementById("cp-ok").classList.remove("hidden");
+    document.getElementById("cp-current").value="";
+    document.getElementById("cp-new").value="";
+    document.getElementById("cp-confirm").value="";
+  }else if(res)showErr("cp-err",res.error||"Failed");
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   CASES — Search + Filter + Pagination + CSV + Manual Create + Live
+   ══════════════════════════════════════════════════════════════════════ */
+async function pageCases(el){
+  casesPage=1;
+  el.innerHTML=`
+    <h2 class="page-title"><span class="live-dot"></span> Cases (Live)</h2>
+    <div class="section-card" style="padding:12px 16px">
+      <div class="search-row" style="margin-bottom:0">
+        <input type="search" id="case-search" placeholder="Search Case ID, email, name, phone…" style="flex:1;min-width:0"/>
+        <select id="filter-status" style="min-width:120px">
+          <option value="">All Statuses</option><option value="open">Open</option><option value="in_progress">In Progress</option>
+          <option value="closed">Closed</option><option value="reopened">Reopened</option>
+        </select>
+        <button class="btn btn-primary btn-sm" onclick="casesPage=1;filterCases()">Search</button>
+        <button class="btn btn-success btn-sm" onclick="exportCSV()" title="Export CSV">📥 CSV</button>
+        ${canWrite()?`<button class="btn btn-warning btn-sm" onclick="toggleEl('create-ticket-form')">+ New Ticket</button>`:''}
+      </div>
+    </div>
+    ${canWrite()?`
+    <div id="create-ticket-form" class="section-card hidden">
+      <strong>Create Ticket Manually</strong>
+      <div class="grid-2" style="margin-top:12px">
+        <div class="form-group"><label class="fl">Name *</label><input type="text" id="t-name"/></div>
+        <div class="form-group"><label class="fl">Email *</label><input type="email" id="t-email"/></div>
+        <div class="form-group"><label class="fl">Phone</label><input type="tel" id="t-phone"/></div>
+        <div class="form-group"><label class="fl">Subject</label><input type="text" id="t-subject"/></div>
+        <div class="form-group" style="grid-column:1/-1"><label class="fl">Message *</label><textarea id="t-message"></textarea></div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" onclick="createTicket()">Create Ticket</button>
+        <button class="btn btn-outline btn-sm" onclick="toggleEl('create-ticket-form')">Cancel</button>
+      </div>
+      <div class="err hidden" id="t-err"></div><div class="ok hidden" id="t-ok"></div>
+    </div>`:''}
+    <div id="cases-table"></div>
+    <div id="cases-pg" class="pagination"></div>`;
+  document.getElementById("case-search").addEventListener("keydown",e=>{if(e.key==="Enter"){casesPage=1;filterCases();}});
+  document.getElementById("filter-status").addEventListener("change",()=>{casesPage=1;filterCases();});
+  filterCases();
+}
+
+async function createTicket(){
+  clearErr("t-err");clearErr("t-ok");
+  const name=document.getElementById("t-name").value.trim();
+  const email=document.getElementById("t-email").value.trim();
+  const message=document.getElementById("t-message").value.trim();
+  if(!name||!email||!message)return showErr("t-err","Name, Email and Message required");
+  const res=await api("POST","/cases/manual",{name,email,phone:document.getElementById("t-phone").value.trim()||"N/A",subject:document.getElementById("t-subject").value.trim()||"Manual Ticket",message});
+  if(res?.ok){
+    const ok=document.getElementById("t-ok");ok.textContent=`✅ Ticket created! Case ID: ${res.caseId}`;ok.classList.remove("hidden");
+    ["t-name","t-email","t-phone","t-subject","t-message"].forEach(id=>document.getElementById(id).value="");
+    filterCases();
+  }else if(res)showErr("t-err",res.error||"Failed");
+}
+
+async function filterCases(silent){
+  const searchEl=document.getElementById("case-search");
+  const filterEl=document.getElementById("filter-status");
+  if(!searchEl||!filterEl)return; // page navigated away
+  const status=filterEl.value||"";
+  const search=searchEl.value.trim()||"";
+  const data=await api("GET",`/cases?status=${encodeURIComponent(status)}&search=${encodeURIComponent(search)}&page=${casesPage}&limit=${PER_PAGE}`);
+  if(!data)return;
+  const wrap=document.getElementById("cases-table");
+  const pg=document.getElementById("cases-pg");
+  if(!wrap||!pg)return;
+  if(!data.rows?.length){wrap.innerHTML='<p style="color:#64748b">No cases found.</p>';pg.innerHTML='';return;}
+  wrap.innerHTML=`<div class="tbl-wrap"><table>
+    <thead><tr><th>Case ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Subject</th><th>Status</th><th>Created</th>${canModify()?'<th>Actions</th>':''}</tr></thead>
+    <tbody>${data.rows.map(c=>`<tr>
+      <td><a href="#" style="color:#60a5fa;white-space:nowrap" onclick="event.preventDefault();viewCase('${esc(c.case_id)}')">${esc(c.case_id)}</a></td>
+      <td style="white-space:nowrap">${esc(c.name)}</td><td>${esc(c.email)}</td><td style="white-space:nowrap">${esc(c.phone)}</td>
+      <td title="${esc(c.subject)}">${esc((c.subject||'').slice(0,30))}</td><td>${badge(c.status)}</td>
+      <td style="white-space:nowrap">${fmtDate(c.created_at)}</td>
+      ${canModify()?`<td style="white-space:nowrap">
+        ${c.status!=='closed'?`<button class="btn btn-danger btn-sm" onclick="caseAction('close','${esc(c.case_id)}')">Close</button> `:''}
+        ${c.status==='closed'?`<button class="btn btn-success btn-sm" onclick="caseAction('reopen','${esc(c.case_id)}')">Reopen</button>`:''}
+      </td>`:''}</tr>`).join("")}</tbody></table></div>`;
+  const tp=Math.ceil(data.total/PER_PAGE);
+  pg.innerHTML=tp>1?`
+    <button class="btn btn-outline btn-sm" ${casesPage<=1?'disabled':''} onclick="casesPage--;filterCases()">← Prev</button>
+    <span class="pg-info">Page ${casesPage} of ${tp} (${data.total} total)</span>
+    <button class="btn btn-outline btn-sm" ${casesPage>=tp?'disabled':''} onclick="casesPage++;filterCases()">Next →</button>`
+    :`<span class="pg-info">${data.total} case${data.total!==1?'s':''}</span>`;
+}
+
+function exportCSV(){
+  const t=document.querySelector("#cases-table table");
+  if(!t)return alert("No data");
+  const rows=[];
+  t.querySelectorAll("tr").forEach(tr=>{const c=[];tr.querySelectorAll("th,td").forEach(td=>c.push('"'+td.innerText.replace(/"/g,'""')+'"'));rows.push(c.join(","));});
+  const b=new Blob([rows.join("\n")],{type:"text/csv"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=`cases-${new Date().toISOString().slice(0,10)}.csv`;a.click();
+}
+
+async function caseAction(action,caseId){
+  if(!confirm(`${action} case ${caseId}?`))return;
+  await api("PUT",`/cases/${caseId}/${action}`);
+  filterCases();
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   CASE DETAIL — with Audit Trail
+   ══════════════════════════════════════════════════════════════════════ */
+async function viewCase(caseId){
+  const c=await api("GET",`/cases/${caseId}`);if(!c)return;
+  /* Fetch audit trail for this case */
+  let auditHtml='';
+  const auditData=await api("GET",`/cases/${caseId}/audit`);
+  if(auditData?.logs?.length){
+    auditHtml=auditData.logs.map(a=>`
+      <div style="background:#0f172a;padding:10px 14px;border-radius:8px;margin-bottom:6px;font-size:13px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+        ${badge(a.action)}
+        <span style="color:#94a3b8">${esc(a.old_status||'—')} → <strong style="color:#e2e8f0">${esc(a.new_status)}</strong></span>
+        <span style="color:#60a5fa">${esc(a.user_name)}</span>
+        <span style="color:#475569;font-size:12px">${fmtDate(a.created_at)}</span>
+        ${a.note?`<span style="color:#94a3b8;font-size:12px">— ${esc(a.note)}</span>`:''}
+      </div>`).join("");
+  }else{
+    auditHtml='<p style="color:#64748b;font-size:13px">No audit entries yet.</p>';
+  }
+
+  const el=document.getElementById("content");
+  el.innerHTML=`
+    <button class="btn btn-outline btn-sm" onclick="loadPage('cases')" style="margin-bottom:16px">← Back</button>
+    <h2 class="page-title">Case: ${esc(c.case_id)}</h2>
+    <div class="section-card">
+      <div class="grid-2">
+        <div>
+          <div class="detail-row"><span class="key">Status</span>${badge(c.status)}</div>
+          <div class="detail-row"><span class="key">Source</span>${esc(c.source)}</div>
+          <div class="detail-row"><span class="key">Created</span>${fmtDate(c.created_at)}</div>
+          <div class="detail-row"><span class="key">Updated</span>${fmtDate(c.updated_at)}</div>
+          ${c.closed_at?`<div class="detail-row"><span class="key">Closed</span>${fmtDate(c.closed_at)}</div>`:''}
+        </div>
+        <div>
+          <div class="detail-row"><span class="key">Name</span>${esc(c.name)}</div>
+          <div class="detail-row"><span class="key">Email</span>${esc(c.email)}</div>
+          <div class="detail-row"><span class="key">Phone</span>${esc(c.phone)}</div>
+          <div class="detail-row"><span class="key">Assigned</span>${esc(c.agent_name||'Unassigned')}</div>
+        </div>
+      </div>
+      <div style="margin-top:16px"><strong>Subject:</strong> ${esc(c.subject)}</div>
+      <div style="margin-top:8px;background:#0f172a;padding:12px;border-radius:8px;font-size:14px;line-height:1.6;word-break:break-word">${esc(c.message)}</div>
+    </div>
+    ${canModify()?`
+    <div class="section-card">
+      <strong>Actions</strong>
+      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+        ${c.status!=='open'?`<button class="btn btn-primary btn-sm" onclick="caseStatusChange('${esc(c.case_id)}','open')">Mark Open</button>`:''}
+        ${c.status!=='in_progress'?`<button class="btn btn-warning btn-sm" onclick="caseStatusChange('${esc(c.case_id)}','in_progress')">Mark In Progress</button>`:''}
+        ${c.status!=='closed'?`<button class="btn btn-danger btn-sm" onclick="caseStatusChange('${esc(c.case_id)}','close')">Close Case</button>`:''}
+        ${c.status==='closed'?`<button class="btn btn-success btn-sm" onclick="caseStatusChange('${esc(c.case_id)}','reopen')">Reopen Case</button>`:''}
+      </div>
+    </div>`:''}
+    <div class="section-card">
+      <strong>📝 Audit Trail</strong>
+      <div style="margin:12px 0;max-height:300px;overflow-y:auto">${auditHtml}</div>
+    </div>
+    <div class="section-card">
+      <strong>Notes / Timeline</strong>
+      <div id="notes-list" style="margin:12px 0">${c.notes?.map(n=>`
+        <div style="background:#0f172a;padding:10px 14px;border-radius:8px;margin-bottom:8px;font-size:13px">
+          <span style="color:#60a5fa">${esc(n.author)}</span>
+          <span style="color:#475569;margin-left:8px">${fmtDate(n.created_at)}</span>
+          <div style="margin-top:4px;word-break:break-word">${esc(n.note)}</div>
+        </div>`).join("")||'<p style="color:#64748b;font-size:13px">No notes yet.</p>'}</div>
+      ${canWrite()?`
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <textarea id="note-text" placeholder="Add a note…" style="flex:1;min-height:60px;min-width:200px"></textarea>
+        <button class="btn btn-primary btn-sm" style="align-self:flex-end" onclick="addNote('${esc(c.case_id)}')">Add Note</button>
+      </div>`:''}</div>`;
+}
+
+async function caseStatusChange(caseId,action){
+  if(action==='in_progress'){
+    /* For in_progress we need a custom PUT since we don't have a dedicated route — use assign to self */
+    /* Actually we can just use close/reopen pattern. Let's add a generic status route or use close/reopen. */
+    /* For now treat in_progress as assign-to-self */
+    await api("PUT",`/cases/${caseId}/assign`,{userId:currentUser.id});
+  }else{
+    await api("PUT",`/cases/${caseId}/${action}`);
+  }
+  viewCase(caseId);
+}
+async function addNote(id){const n=document.getElementById("note-text").value.trim();if(!n)return;await api("POST",`/cases/${id}/notes`,{note:n});viewCase(id);}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   CUSTOMERS
+   ══════════════════════════════════════════════════════════════════════ */
+async function pageCustomers(el){
+  el.innerHTML=`
+    <h2 class="page-title">👥 Customers</h2>
+    <div class="section-card">
+      <strong>Search Customer</strong>
+      <div class="search-row" style="margin-top:12px">
+        <input type="text" id="s-mobile" placeholder="Mobile number"/><input type="text" id="s-email" placeholder="Email"/>
+        <button class="btn btn-primary btn-sm" onclick="searchCustomer()">Search</button>
+      </div>
+      <div id="search-result"></div>
+    </div>
+    ${canWrite()?`
+    <div class="section-card">
+      <strong>Add Customer</strong>
+      <div class="grid-2" style="margin-top:12px">
+        <div class="form-group"><label class="fl">Name *</label><input type="text" id="c-name"/></div>
+        <div class="form-group"><label class="fl">Email</label><input type="email" id="c-email"/></div>
+        <div class="form-group"><label class="fl">Phone *</label><input type="tel" id="c-phone"/></div>
+        <div class="form-group"><label class="fl">Plan</label><input type="text" id="c-plan" placeholder="Premium, Basic"/></div>
+        <div class="form-group" style="grid-column:1/-1"><label class="fl">Address</label><textarea id="c-addr"></textarea></div>
+        <div class="form-group" style="grid-column:1/-1"><label class="fl">Notes</label><textarea id="c-notes"></textarea></div>
+      </div>
+      <button class="btn btn-primary" onclick="addCustomer()">Save Customer</button>
+      <div class="err hidden" id="c-err"></div><div class="ok hidden" id="c-ok"></div>
+    </div>`:''} `;
+}
+
+async function searchCustomer(){
+  const m=document.getElementById("s-mobile").value.trim(),e=document.getElementById("s-email").value.trim();
+  if(!m&&!e)return;
+  const data=await api("GET",`/customers/search?mobile=${encodeURIComponent(m)}&email=${encodeURIComponent(e)}`);
+  const w=document.getElementById("search-result");
+  if(!data?.results?.length){w.innerHTML='<p style="color:#64748b;margin-top:8px;font-size:13px">No customers found.</p>';return;}
+  w.innerHTML=`<div class="tbl-wrap" style="margin-top:12px"><table>
+    <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Plan</th><th>Added</th></tr></thead>
+    <tbody>${data.results.map(c=>`<tr><td>${esc(c.name)}</td><td>${esc(c.email)}</td><td>${esc(c.phone)}</td><td>${esc(c.plan)}</td><td>${fmtDate(c.created_at)}</td></tr>`).join("")}</tbody></table></div>`;
+}
+
+async function addCustomer(){
+  clearErr("c-err");clearErr("c-ok");
+  const name=document.getElementById("c-name").value.trim(),phone=document.getElementById("c-phone").value.trim();
+  if(!name||!phone)return showErr("c-err","Name and Phone required");
+  const res=await api("POST","/customers",{name,phone,email:document.getElementById("c-email").value.trim(),address:document.getElementById("c-addr").value.trim(),plan:document.getElementById("c-plan").value.trim(),notes:document.getElementById("c-notes").value.trim()});
+  if(res?.ok){document.getElementById("c-ok").textContent="✅ Saved!";document.getElementById("c-ok").classList.remove("hidden");["c-name","c-email","c-phone","c-plan","c-addr","c-notes"].forEach(id=>document.getElementById(id).value="");}
+  else if(res)showErr("c-err",res.error||"Failed");
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   USERS (admin) — Add + Delete + Permissions
+   ══════════════════════════════════════════════════════════════════════ */
+async function pageUsers(el){
+  const data=await api("GET","/users");
+  if(!data)return;
+  el.innerHTML=`
+    <h2 class="page-title">🔑 Users & Permissions</h2>
+    <div class="section-card">
+      <strong>Add User</strong>
+      <div class="grid-2" style="margin-top:12px">
+        <div class="form-group"><label class="fl">Name *</label><input type="text" id="u-name"/></div>
+        <div class="form-group"><label class="fl">Email *</label><input type="email" id="u-email"/></div>
+        <div class="form-group"><label class="fl">Password *</label><input type="password" id="u-pass"/></div>
+        <div class="form-group"><label class="fl">Role</label><select id="u-role" onchange="roleChanged()">
+          <option value="agent">Agent / Staff</option>
+          <option value="admin">Admin</option>
+          ${isSuperAdmin()?'<option value="super_admin">Super Admin</option>':''}
+        </select></div>
+      </div>
+      <div id="perm-section">
+        <label class="fl" style="margin-top:8px">Permissions (for agents)</label>
+        <div class="perm-row">
+          <label><input type="checkbox" id="p-read" checked disabled/> Read</label>
+          <label><input type="checkbox" id="p-write"/> Write</label>
+          <label><input type="checkbox" id="p-modify"/> Modify Status</label>
+          <label><input type="checkbox" id="p-delete"/> Delete</label>
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="addUser()" style="margin-top:12px">Add User</button>
+      <div class="err hidden" id="u-err"></div><div class="ok hidden" id="u-ok"></div>
+    </div>
+    <div class="section-card">
+      <strong>All Users</strong>
+      <div class="tbl-wrap" style="margin-top:12px"><table>
+        <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Role</th><th>Permissions</th><th>Active</th><th>Created</th><th>Actions</th></tr></thead>
+        <tbody>${(data.users||[]).map(u=>{
+          const p=u.permissions||{};
+          const isTargetSuperAdmin=u.role==='super_admin'||u.email?.toLowerCase()==='support@techsupport4.com';
+          const isTargetAdmin=u.role==='admin';
+          const canManageThisUser=isSuperAdmin()||(isAdmin()&&!isTargetSuperAdmin&&!isTargetAdmin);
+          const canManageThisAdmin=isSuperAdmin();
+          const isSelf=u.id===currentUser.id;
+          const roleDisplay=isTargetSuperAdmin?'🔐 super_admin':(u.role==='admin'?'👑 admin':'👤 '+u.role);
+          return`<tr>
+          <td>${u.id}</td><td>${esc(u.name)}</td><td>${esc(u.email)}</td>
+          <td>${badge(u.role)}${isTargetSuperAdmin?' 🔐':''}</td>
+          <td style="font-size:11px">${Object.entries(p).filter(([,v])=>v).map(([k])=>`<span class="badge badge-success">${k}</span>`).join(" ")||'—'}</td>
+          <td>${u.is_active?'✅':'❌'}</td>
+          <td style="white-space:nowrap">${fmtDate(u.created_at)}</td>
+          <td style="white-space:nowrap">
+            ${!isSelf&&canManageThisUser&&!isTargetSuperAdmin?`<button class="btn btn-outline btn-sm" onclick="toggleUser(${u.id},${u.is_active})">${u.is_active?'Disable':'Enable'}</button>`:''}
+            ${!isSelf&&canManageThisAdmin&&isTargetAdmin?`<button class="btn btn-outline btn-sm" onclick="toggleUser(${u.id},${u.is_active})">${u.is_active?'Disable':'Enable'}</button>`:''}
+            ${!isSelf&&!isTargetSuperAdmin&&(canManageThisUser||(canManageThisAdmin&&isTargetAdmin))?`<button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id},'${esc(u.name)}')">Delete</button>`:''}
+            ${!isTargetSuperAdmin&&u.role!=='admin'?`<button class="btn btn-primary btn-sm" onclick="editPerms(${u.id},'${esc(u.name)}',${u.permissions?JSON.stringify(JSON.stringify(u.permissions)):'null'})">Perms</button>`:''}
+            ${!isSelf&&(canManageThisUser||(canManageThisAdmin&&isTargetAdmin))&&!isTargetSuperAdmin?`<button class="btn btn-warning btn-sm" onclick="showChangeUserPwd(${u.id},'${esc(u.name)}')">Reset Pwd</button>`:''}
+            ${isSuperAdmin()&&!isSelf&&!isTargetSuperAdmin?`<button class="btn btn-outline btn-sm" style="border-color:#ef4444;color:#ef4444" onclick="forceLogout(${u.id},'${esc(u.name)}')">Logout</button>`:''}
+          </td></tr>`}).join("")}</tbody></table></div>
+    </div>
+    <div id="edit-perm-modal" class="section-card hidden">
+      <strong>Edit Permissions for <span id="epm-name"></span></strong>
+      <div class="perm-row" style="margin:12px 0">
+        <label><input type="checkbox" id="ep-read" checked disabled/> Read</label>
+        <label><input type="checkbox" id="ep-write"/> Write</label>
+        <label><input type="checkbox" id="ep-modify"/> Modify</label>
+        <label><input type="checkbox" id="ep-delete"/> Delete</label>
+      </div>
+      <input type="hidden" id="ep-uid"/>
+      <button class="btn btn-primary btn-sm" onclick="savePerms()">Save Permissions</button>
+      <button class="btn btn-outline btn-sm" onclick="toggleEl('edit-perm-modal')">Cancel</button>
+    </div>
+    <div id="change-user-pwd-modal" class="section-card hidden">
+      <strong>Reset Password for <span id="cup-name"></span></strong>
+      <div style="margin-top:12px">
+        <div class="form-group"><label class="fl">New Password *</label><input type="password" id="cup-new"/></div>
+        <div class="form-group"><label class="fl">Confirm Password *</label><input type="password" id="cup-confirm"/></div>
+      </div>
+      <input type="hidden" id="cup-uid"/>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" onclick="changeUserPassword()">Reset Password</button>
+        <button class="btn btn-outline btn-sm" onclick="toggleEl('change-user-pwd-modal')">Cancel</button>
+      </div>
+      <div class="err hidden" id="cup-err"></div>
+      <div class="ok hidden" id="cup-ok"></div>
+    </div>`;
+}
+
+function showChangeUserPwd(id,name){
+  document.getElementById("cup-name").textContent=name;
+  document.getElementById("cup-uid").value=id;
+  document.getElementById("cup-new").value="";
+  document.getElementById("cup-confirm").value="";
+  clearErr("cup-err");clearErr("cup-ok");
+  document.getElementById("change-user-pwd-modal").classList.remove("hidden");
+}
+
+async function changeUserPassword(){
+  clearErr("cup-err");clearErr("cup-ok");
+  const id=document.getElementById("cup-uid").value;
+  const newPwd=document.getElementById("cup-new").value;
+  const confirm=document.getElementById("cup-confirm").value;
+  if(!newPwd||!confirm)return showErr("cup-err","All fields required");
+  if(newPwd!==confirm)return showErr("cup-err","Passwords do not match");
+  if(newPwd.length<8)return showErr("cup-err","Password must be at least 8 characters");
+  const res=await api("PUT",`/users/${id}/password`,{newPassword:newPwd});
+  if(res?.ok){
+    document.getElementById("cup-ok").textContent="✅ Password reset successfully!";
+    document.getElementById("cup-ok").classList.remove("hidden");
+    document.getElementById("cup-new").value="";
+    document.getElementById("cup-confirm").value="";
+  }else if(res)showErr("cup-err",res.error||"Failed");
+}
+
+async function forceLogout(id,name){
+  if(!confirm(`Force logout "${name}"? They will need to login again.`))return;
+  const res=await api("POST",`/users/${id}/force-logout`);
+  if(res?.ok)alert(`✅ ${name} has been logged out.`);
+  else if(res)alert(res.error||"Failed");
+}
+
+function roleChanged(){
+  const role=document.getElementById("u-role").value;
+  const isAdmOrSuper=role==="admin"||role==="super_admin";
+  document.getElementById("perm-section").style.display=isAdmOrSuper?"none":"";
+}
+
+async function addUser(){
+  clearErr("u-err");clearErr("u-ok");
+  const name=document.getElementById("u-name").value.trim();
+  const email=document.getElementById("u-email").value.trim();
+  const pass=document.getElementById("u-pass").value;
+  const role=document.getElementById("u-role").value;
+  if(!name||!email||!pass)return showErr("u-err","All fields required");
+  const permissions={
+    read:true,
+    write:document.getElementById("p-write").checked,
+    modify:document.getElementById("p-modify").checked,
+    delete:document.getElementById("p-delete").checked
+  };
+  const res=await api("POST","/users",{name,email,password:pass,role,permissions});
+  if(res?.ok){
+    document.getElementById("u-ok").textContent="✅ User created!";
+    document.getElementById("u-ok").classList.remove("hidden");
+    ["u-name","u-email","u-pass"].forEach(id=>document.getElementById(id).value="");
+    pageUsers(document.getElementById("content"));
+  }else if(res)showErr("u-err",res.error||"Failed");
+}
+
+async function toggleUser(id,active){await api("PUT",`/users/${id}`,{is_active:active?0:1});pageUsers(document.getElementById("content"));}
+
+async function deleteUser(id,name){
+  if(!confirm(`DELETE user "${name}"? This cannot be undone.`))return;
+  const res=await api("DELETE",`/users/${id}`);
+  if(res?.ok)pageUsers(document.getElementById("content"));
+  else if(res)alert(res.error||"Failed");
+}
+
+function editPerms(id,name,permsStr){
+  let p={read:true,write:false,modify:false,delete:false};
+  try{
+    if(permsStr)p=typeof permsStr==='string'?JSON.parse(permsStr):permsStr;
+  }catch(e){console.warn('Failed to parse perms:',e);}
+  document.getElementById("epm-name").textContent=name;
+  document.getElementById("ep-uid").value=id;
+  document.getElementById("ep-write").checked=!!p.write;
+  document.getElementById("ep-modify").checked=!!p.modify;
+  document.getElementById("ep-delete").checked=!!p.delete;
+  document.getElementById("edit-perm-modal").classList.remove("hidden");
+}
+
+async function savePerms(){
+  const id=document.getElementById("ep-uid").value;
+  const permissions={
+    read:true,
+    write:document.getElementById("ep-write").checked,
+    modify:document.getElementById("ep-modify").checked,
+    delete:document.getElementById("ep-delete").checked
+  };
+  const res=await api("PUT",`/users/${id}`,{permissions});
+  if(res?.ok){toggleEl("edit-perm-modal");pageUsers(document.getElementById("content"));}
+  else if(res)alert(res.error||"Failed");
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   AUDIT LOG (admin global view)
+   ══════════════════════════════════════════════════════════════════════ */
+async function pageAudit(el){
+  const data=await api("GET","/cases/audit?limit=200");
+  if(!data)return;
+  el.innerHTML=`
+    <h2 class="page-title">📝 Audit Log</h2>
+    <div class="section-card"><div class="tbl-wrap"><table>
+      <thead><tr><th>Ticket</th><th>Action</th><th>Old Status</th><th>New Status</th><th>By</th><th>Time</th></tr></thead>
+      <tbody>${(data.logs||[]).map(a=>`<tr>
+        <td><a href="#" style="color:#60a5fa" onclick="event.preventDefault();viewCase('${esc(a.ticket_id)}')">${esc(a.ticket_id)}</a></td>
+        <td>${badge(a.action)}</td>
+        <td>${a.old_status?badge(a.old_status):'—'}</td>
+        <td>${badge(a.new_status)}</td>
+        <td>${esc(a.user_name)}</td>
+        <td style="white-space:nowrap">${fmtDate(a.created_at)}</td>
+      </tr>`).join("")||'<tr><td colspan="6" style="color:#64748b">No audit entries yet.</td></tr>'}</tbody></table></div></div>`;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   LOGIN LOGS
+   ══════════════════════════════════════════════════════════════════════ */
+async function pageLogs(el){
+  const data=await api("GET","/users/logs?limit=200");
+  if(!data)return;
+  el.innerHTML=`
+    <h2 class="page-title">📋 Login Logs</h2>
+    <div class="section-card"><div class="tbl-wrap"><table>
+      <thead><tr><th>User</th><th>Email</th><th>IP</th><th>Location</th><th>Status</th><th>Time</th></tr></thead>
+      <tbody>${(data.logs||[]).map(l=>`<tr>
+        <td>${esc(l.name)}</td><td>${esc(l.email)}</td>
+        <td style="font-family:monospace;font-size:12px">${esc(l.ip_address)}</td>
+        <td>${[l.city,l.region,l.country].filter(Boolean).join(", ")||"—"}</td>
+        <td>${badge(l.status==='success'?'success':'open')}</td>
+        <td style="white-space:nowrap">${fmtDate(l.logged_at)}</td>
+      </tr>`).join("")||'<tr><td colspan="6" style="color:#64748b">No logs yet.</td></tr>'}</tbody></table></div></div>`;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   BOOT
+   ══════════════════════════════════════════════════════════════════════ */
+(async function(){
+  try{
+    const res=await fetch(API+"/auth/me",{credentials:"include"});
+    if(res.ok){currentUser=await res.json();initApp();return;}
+  }catch{}
+  document.getElementById("auth-screen").style.display="";
+})();
+
