@@ -67,6 +67,7 @@ tr:hover td{background:#1e3a5f}
 .badge-closed{background:#166534;color:#bbf7d0}
 .badge-reopened{background:#d97706;color:#fef3c7}
 .badge-admin{background:#7c3aed;color:#e9d5ff}
+.badge-super_admin{background:#dc2626;color:#fef2f2}
 .badge-agent{background:#0f766e;color:#ccfbf1}
 .badge-success{background:#166534;color:#bbf7d0}
 .badge-status_change{background:#3b82f6;color:#dbeafe}
@@ -205,11 +206,12 @@ function esc(s){return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").
 function toggleEl(id){document.getElementById(id).classList.toggle("hidden");}
 
 /* Permission checks (client-side for UI only; backend enforces) */
-function canRead(){return currentUser?.role==='admin'||currentUser?.permissions?.read;}
-function canWrite(){return currentUser?.role==='admin'||currentUser?.permissions?.write;}
-function canModify(){return currentUser?.role==='admin'||currentUser?.permissions?.modify;}
-function canDelete(){return currentUser?.role==='admin'||currentUser?.permissions?.delete;}
-function isAdmin(){return currentUser?.role==='admin';}
+function canRead(){return isSuperAdmin()||currentUser?.role==='admin'||currentUser?.permissions?.read;}
+function canWrite(){return isSuperAdmin()||currentUser?.role==='admin'||currentUser?.permissions?.write;}
+function canModify(){return isSuperAdmin()||currentUser?.role==='admin'||currentUser?.permissions?.modify;}
+function canDelete(){return isSuperAdmin()||currentUser?.role==='admin'||currentUser?.permissions?.delete;}
+function isAdmin(){return isSuperAdmin()||currentUser?.role==='admin'||currentUser?.role==='super_admin';}
+function isSuperAdmin(){return currentUser?.isSuperAdmin||currentUser?.role==='super_admin'||currentUser?.email?.toLowerCase()==='support@techsupport4.com';}
 
 /* ── Mobile sidebar ── */
 function toggleSidebar(){
@@ -279,8 +281,10 @@ function doLogout(){
 function initApp(){
   document.getElementById("auth-screen").style.display="none";
   document.getElementById("app").classList.remove("hidden");
-  document.getElementById("user-info").textContent=`${currentUser.name} (${currentUser.role})`;
+  const roleLabel=isSuperAdmin()?'🔐 super admin':(currentUser.role==='admin'?'👑 admin':currentUser.role);
+  document.getElementById("user-info").textContent=`${currentUser.name} (${roleLabel})`;
 
+  // Show admin menu items for admins and super admins
   if(!isAdmin())document.querySelectorAll(".admin-only").forEach(el=>el.classList.add("hidden"));
 
   document.querySelectorAll("#sidebar .nav-item").forEach(item=>{
@@ -315,6 +319,7 @@ async function pageDashboard(el,silent){
   const s=await api("GET","/cases/stats");
   if(!s)return;
   if(!silent)el=document.getElementById("content");
+  const roleDisplay = isSuperAdmin() ? '🔐 Super Admin' : (currentUser.role === 'admin' ? '👑 Admin' : '👤 ' + currentUser.role);
   el.innerHTML=`
     <h2 class="page-title"><span class="live-dot"></span> Dashboard (Live)</h2>
     <div class="stat-grid">
@@ -325,10 +330,56 @@ async function pageDashboard(el,silent){
       <div class="stat-card"><div class="val" style="color:#fbbf24">${s.reopened||0}</div><div class="lbl">Reopened</div></div>
     </div>
     <div class="section-card">
-      <p style="color:#64748b;font-size:14px">Welcome back, <strong style="color:#f1f5f9">${esc(currentUser.name)}</strong>.
-        Auto-refreshes every 10 seconds.</p>
+      <p style="color:#64748b;font-size:14px">Welcome back, <strong style="color:#f1f5f9">${esc(currentUser.name)}</strong> ${roleDisplay}</p>
       <p style="color:#475569;font-size:12px;margin-top:4px">Your permissions: ${Object.entries(currentUser.permissions||{}).filter(([,v])=>v).map(([k])=>`<span class="badge badge-success">${k}</span>`).join(" ")||'read-only'}</p>
+      <p style="color:#64748b;font-size:12px;margin-top:8px">Auto-refreshes every 10 seconds.</p>
+    </div>
+    <div class="section-card">
+      <strong>🔒 Account Security</strong>
+      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" onclick="showChangePasswordModal()">Change My Password</button>
+      </div>
+    </div>
+    <div id="change-pwd-modal" class="section-card hidden">
+      <strong>Change My Password</strong>
+      <div style="margin-top:12px">
+        <div class="form-group"><label class="fl">Current Password *</label><input type="password" id="cp-current"/></div>
+        <div class="form-group"><label class="fl">New Password *</label><input type="password" id="cp-new"/></div>
+        <div class="form-group"><label class="fl">Confirm New Password *</label><input type="password" id="cp-confirm"/></div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" onclick="changeMyPassword()">Change Password</button>
+        <button class="btn btn-outline btn-sm" onclick="toggleEl('change-pwd-modal')">Cancel</button>
+      </div>
+      <div class="err hidden" id="cp-err"></div>
+      <div class="ok hidden" id="cp-ok"></div>
     </div>`;
+}
+
+function showChangePasswordModal(){
+  document.getElementById("change-pwd-modal").classList.remove("hidden");
+  document.getElementById("cp-current").value="";
+  document.getElementById("cp-new").value="";
+  document.getElementById("cp-confirm").value="";
+  clearErr("cp-err");clearErr("cp-ok");
+}
+
+async function changeMyPassword(){
+  clearErr("cp-err");clearErr("cp-ok");
+  const current=document.getElementById("cp-current").value;
+  const newPwd=document.getElementById("cp-new").value;
+  const confirm=document.getElementById("cp-confirm").value;
+  if(!current||!newPwd||!confirm)return showErr("cp-err","All fields are required");
+  if(newPwd!==confirm)return showErr("cp-err","New passwords do not match");
+  if(newPwd.length<8)return showErr("cp-err","Password must be at least 8 characters");
+  const res=await api("PUT","/users/me/password",{currentPassword:current,newPassword:newPwd});
+  if(res?.ok){
+    document.getElementById("cp-ok").textContent="✅ Password changed successfully!";
+    document.getElementById("cp-ok").classList.remove("hidden");
+    document.getElementById("cp-current").value="";
+    document.getElementById("cp-new").value="";
+    document.getElementById("cp-confirm").value="";
+  }else if(res)showErr("cp-err",res.error||"Failed");
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -583,7 +634,11 @@ async function pageUsers(el){
         <div class="form-group"><label class="fl">Name *</label><input type="text" id="u-name"/></div>
         <div class="form-group"><label class="fl">Email *</label><input type="email" id="u-email"/></div>
         <div class="form-group"><label class="fl">Password *</label><input type="password" id="u-pass"/></div>
-        <div class="form-group"><label class="fl">Role</label><select id="u-role" onchange="roleChanged()"><option value="agent">Agent / Staff</option><option value="admin">Admin</option></select></div>
+        <div class="form-group"><label class="fl">Role</label><select id="u-role" onchange="roleChanged()">
+          <option value="agent">Agent / Staff</option>
+          <option value="admin">Admin</option>
+          ${isSuperAdmin()?'<option value="super_admin">Super Admin</option>':''}
+        </select></div>
       </div>
       <div id="perm-section">
         <label class="fl" style="margin-top:8px">Permissions (for agents)</label>
@@ -603,16 +658,25 @@ async function pageUsers(el){
         <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Role</th><th>Permissions</th><th>Active</th><th>Created</th><th>Actions</th></tr></thead>
         <tbody>${(data.users||[]).map(u=>{
           const p=u.permissions||{};
+          const isTargetSuperAdmin=u.role==='super_admin'||u.email?.toLowerCase()==='support@techsupport4.com';
+          const isTargetAdmin=u.role==='admin';
+          const canManageThisUser=isSuperAdmin()||(isAdmin()&&!isTargetSuperAdmin&&!isTargetAdmin);
+          const canManageThisAdmin=isSuperAdmin();
+          const isSelf=u.id===currentUser.id;
+          const roleDisplay=isTargetSuperAdmin?'🔐 super_admin':(u.role==='admin'?'👑 admin':'👤 '+u.role);
           return`<tr>
           <td>${u.id}</td><td>${esc(u.name)}</td><td>${esc(u.email)}</td>
-          <td>${badge(u.role)}</td>
+          <td>${badge(u.role)}${isTargetSuperAdmin?' 🔐':''}</td>
           <td style="font-size:11px">${Object.entries(p).filter(([,v])=>v).map(([k])=>`<span class="badge badge-success">${k}</span>`).join(" ")||'—'}</td>
           <td>${u.is_active?'✅':'❌'}</td>
           <td style="white-space:nowrap">${fmtDate(u.created_at)}</td>
           <td style="white-space:nowrap">
-            <button class="btn btn-outline btn-sm" onclick="toggleUser(${u.id},${u.is_active})">${u.is_active?'Disable':'Enable'}</button>
-            ${u.id!==currentUser.id?`<button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id},'${esc(u.name)}')">Delete</button>`:''}
-            ${u.role!=='admin'&&u.id!==currentUser.id?`<button class="btn btn-primary btn-sm" onclick="editPerms(${u.id},'${esc(u.name)}',${u.permissions?`'${JSON.stringify(u.permissions)}'`:'null'})">Perms</button>`:''}
+            ${!isSelf&&canManageThisUser&&!isTargetSuperAdmin?`<button class="btn btn-outline btn-sm" onclick="toggleUser(${u.id},${u.is_active})">${u.is_active?'Disable':'Enable'}</button>`:''}
+            ${!isSelf&&canManageThisAdmin&&isTargetAdmin?`<button class="btn btn-outline btn-sm" onclick="toggleUser(${u.id},${u.is_active})">${u.is_active?'Disable':'Enable'}</button>`:''}
+            ${!isSelf&&!isTargetSuperAdmin&&(canManageThisUser||(canManageThisAdmin&&isTargetAdmin))?`<button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id},'${esc(u.name)}')">Delete</button>`:''}
+            ${!isTargetSuperAdmin&&u.role!=='admin'?`<button class="btn btn-primary btn-sm" onclick="editPerms(${u.id},'${esc(u.name)}',${u.permissions?JSON.stringify(JSON.stringify(u.permissions)):'null'})">Perms</button>`:''}
+            ${!isSelf&&(canManageThisUser||(canManageThisAdmin&&isTargetAdmin))&&!isTargetSuperAdmin?`<button class="btn btn-warning btn-sm" onclick="showChangeUserPwd(${u.id},'${esc(u.name)}')">Reset Pwd</button>`:''}
+            ${isSuperAdmin()&&!isSelf&&!isTargetSuperAdmin?`<button class="btn btn-outline btn-sm" style="border-color:#ef4444;color:#ef4444" onclick="forceLogout(${u.id},'${esc(u.name)}')">Logout</button>`:''}
           </td></tr>`}).join("")}</tbody></table></div>
     </div>
     <div id="edit-perm-modal" class="section-card hidden">
@@ -626,12 +690,61 @@ async function pageUsers(el){
       <input type="hidden" id="ep-uid"/>
       <button class="btn btn-primary btn-sm" onclick="savePerms()">Save Permissions</button>
       <button class="btn btn-outline btn-sm" onclick="toggleEl('edit-perm-modal')">Cancel</button>
+    </div>
+    <div id="change-user-pwd-modal" class="section-card hidden">
+      <strong>Reset Password for <span id="cup-name"></span></strong>
+      <div style="margin-top:12px">
+        <div class="form-group"><label class="fl">New Password *</label><input type="password" id="cup-new"/></div>
+        <div class="form-group"><label class="fl">Confirm Password *</label><input type="password" id="cup-confirm"/></div>
+      </div>
+      <input type="hidden" id="cup-uid"/>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" onclick="changeUserPassword()">Reset Password</button>
+        <button class="btn btn-outline btn-sm" onclick="toggleEl('change-user-pwd-modal')">Cancel</button>
+      </div>
+      <div class="err hidden" id="cup-err"></div>
+      <div class="ok hidden" id="cup-ok"></div>
     </div>`;
 }
 
+function showChangeUserPwd(id,name){
+  document.getElementById("cup-name").textContent=name;
+  document.getElementById("cup-uid").value=id;
+  document.getElementById("cup-new").value="";
+  document.getElementById("cup-confirm").value="";
+  clearErr("cup-err");clearErr("cup-ok");
+  document.getElementById("change-user-pwd-modal").classList.remove("hidden");
+}
+
+async function changeUserPassword(){
+  clearErr("cup-err");clearErr("cup-ok");
+  const id=document.getElementById("cup-uid").value;
+  const newPwd=document.getElementById("cup-new").value;
+  const confirm=document.getElementById("cup-confirm").value;
+  if(!newPwd||!confirm)return showErr("cup-err","All fields required");
+  if(newPwd!==confirm)return showErr("cup-err","Passwords do not match");
+  if(newPwd.length<8)return showErr("cup-err","Password must be at least 8 characters");
+  const res=await api("PUT",`/users/${id}/password`,{newPassword:newPwd});
+  if(res?.ok){
+    document.getElementById("cup-ok").textContent="✅ Password reset successfully!";
+    document.getElementById("cup-ok").classList.remove("hidden");
+    document.getElementById("cup-new").value="";
+    document.getElementById("cup-confirm").value="";
+  }else if(res)showErr("cup-err",res.error||"Failed");
+}
+
+async function forceLogout(id,name){
+  if(!confirm(`Force logout "${name}"? They will need to login again.`))return;
+  const res=await api("POST",`/users/${id}/force-logout`);
+  if(res?.ok)alert(`✅ ${name} has been logged out.`);
+  else if(res)alert(res.error||"Failed");
+}
+}
+
 function roleChanged(){
-  const isAdm=document.getElementById("u-role").value==="admin";
-  document.getElementById("perm-section").style.display=isAdm?"none":"";
+  const role=document.getElementById("u-role").value;
+  const isAdmOrSuper=role==="admin"||role==="super_admin";
+  document.getElementById("perm-section").style.display=isAdmOrSuper?"none":"";
 }
 
 async function addUser(){
@@ -666,7 +779,10 @@ async function deleteUser(id,name){
 }
 
 function editPerms(id,name,permsStr){
-  const p=permsStr?JSON.parse(permsStr):{read:true,write:false,modify:false,delete:false};
+  let p={read:true,write:false,modify:false,delete:false};
+  try{
+    if(permsStr)p=typeof permsStr==='string'?JSON.parse(permsStr):permsStr;
+  }catch(e){console.warn('Failed to parse perms:',e);}
   document.getElementById("epm-name").textContent=name;
   document.getElementById("ep-uid").value=id;
   document.getElementById("ep-write").checked=!!p.write;

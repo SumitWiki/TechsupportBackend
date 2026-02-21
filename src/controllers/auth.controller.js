@@ -214,15 +214,27 @@ function parseMaxAge(expiresIn) {
   return 8 * 60 * 60 * 1000;
 }
 
+// Super admin email check
+const SUPER_ADMIN_EMAIL = "support@techsupport4.com";
+function checkIsSuperAdmin(user) {
+  return user?.role === "super_admin" || user?.email?.toLowerCase() === SUPER_ADMIN_EMAIL;
+}
+
 // ── Whoami ────────────────────────────────────────────────────────────────────
 exports.me = async (req, res) => {
   const user = await User.findById(req.user.id);
   if (!user) return res.status(401).json({ error: "User not found" });
+  
+  const isSuperAdmin = checkIsSuperAdmin(user);
+  const effectiveRole = isSuperAdmin ? "super_admin" : user.role;
+  const fullPerms = { read: true, write: true, modify: true, delete: true };
+  
   res.json({
     id: user.id,
     name: user.name,
     email: user.email,
-    role: user.role,
-    permissions: user.permissions || { read: true, write: false, modify: false, delete: false },
+    role: effectiveRole,
+    isSuperAdmin: isSuperAdmin,
+    permissions: isSuperAdmin || user.role === "admin" ? fullPerms : (user.permissions || { read: true, write: false, modify: false, delete: false }),
   });
 };
