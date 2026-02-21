@@ -1,18 +1,29 @@
 const db = require("../config/db");
 
+// Default permissions for backwards compatibility
+const DEFAULT_PERMS = { read: true, write: false, modify: false, delete: false };
+
 const User = {
   async findByEmail(email) {
     const [rows] = await db.query("SELECT * FROM users WHERE email = ? LIMIT 1", [email]);
+    if (rows[0]) {
+      rows[0].permissions = rows[0].permissions ? (typeof rows[0].permissions === 'string' ? JSON.parse(rows[0].permissions) : rows[0].permissions) : DEFAULT_PERMS;
+    }
     return rows[0] || null;
   },
   async findById(id) {
-    const [rows] = await db.query("SELECT id,name,email,role,permissions,is_active,created_at FROM users WHERE id = ? LIMIT 1", [id]);
-    if (rows[0] && typeof rows[0].permissions === 'string') rows[0].permissions = JSON.parse(rows[0].permissions);
+    // Use SELECT * to handle both old (no permissions) and new schemas
+    const [rows] = await db.query("SELECT * FROM users WHERE id = ? LIMIT 1", [id]);
+    if (rows[0]) {
+      rows[0].permissions = rows[0].permissions ? (typeof rows[0].permissions === 'string' ? JSON.parse(rows[0].permissions) : rows[0].permissions) : DEFAULT_PERMS;
+    }
     return rows[0] || null;
   },
   async findAll() {
-    const [rows] = await db.query("SELECT id,name,email,role,permissions,is_active,created_at FROM users ORDER BY created_at DESC");
-    rows.forEach(r => { if (typeof r.permissions === 'string') r.permissions = JSON.parse(r.permissions); });
+    const [rows] = await db.query("SELECT * FROM users ORDER BY created_at DESC");
+    rows.forEach(r => {
+      r.permissions = r.permissions ? (typeof r.permissions === 'string' ? JSON.parse(r.permissions) : r.permissions) : DEFAULT_PERMS;
+    });
     return rows;
   },
   async create({ name, email, password_hash, role, permissions, created_by }) {
