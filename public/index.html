@@ -218,9 +218,30 @@ function showErr(id,msg){const el=document.getElementById(id);if(el){el.textCont
 function clearErr(id){const el=document.getElementById(id);if(el){el.textContent="";el.classList.add("hidden");}}
 function badge(s){return`<span class="badge badge-${s}">${(s||'').replace(/_/g," ")}</span>`;}
 function priorityBadge(p){
-  const colors={low:'#22c55e',medium:'#f59e0b',high:'#ef4444'};
+  const colors={low:'#22c55e',medium:'#f59e0b',high:'#ef4444',urgent:'#9333ea'};
+  const icons={low:'🟢',medium:'🟡',high:'🔴',urgent:'🟣'};
   const c=colors[p]||'#94a3b8';
-  return`<span style="background:${c};color:#fff;padding:2px 8px;border-radius:4px;font-size:0.75em;font-weight:600;text-transform:uppercase">${p||'medium'}</span>`;
+  const icon=icons[p]||'';
+  return`<span style="background:${c};color:#fff;padding:2px 8px;border-radius:4px;font-size:0.75em;font-weight:600;text-transform:uppercase">${icon} ${p||'medium'}</span>`;
+}
+function slaTimer(createdAt){
+  if(!createdAt)return'—';
+  const created=new Date(createdAt);
+  const now=new Date();
+  const diffMs=now-created;
+  const diffMins=Math.floor(diffMs/60000);
+  const diffHrs=Math.floor(diffMins/60);
+  const diffDays=Math.floor(diffHrs/24);
+  if(diffDays>0)return`${diffDays}d ${diffHrs%24}h`;
+  if(diffHrs>0)return`${diffHrs}h ${diffMins%60}m`;
+  return`${diffMins}m`;
+}
+function slaColor(createdAt,status){
+  if(status==='closed')return'#22c55e';
+  const diffHrs=(new Date()-new Date(createdAt))/3600000;
+  if(diffHrs<4)return'#22c55e';
+  if(diffHrs<24)return'#f59e0b';
+  return'#ef4444';
 }
 function fmtDate(d){return d?new Date(d).toLocaleString("en-IN",{dateStyle:"medium",timeStyle:"short"}):"—";}
 function esc(s){return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
@@ -354,6 +375,10 @@ async function pageDashboard(el,silent){
       <strong>📊 Priority Breakdown</strong>
       <div style="margin-top:12px;display:flex;gap:16px;flex-wrap:wrap">
         <div style="text-align:center">
+          <div style="font-size:1.5em;font-weight:600;color:#9333ea">${s.urgent||0}</div>
+          <div style="font-size:0.75em;color:#94a3b8">🟣 Urgent</div>
+        </div>
+        <div style="text-align:center">
           <div style="font-size:1.5em;font-weight:600;color:#ef4444">${s.high||0}</div>
           <div style="font-size:0.75em;color:#94a3b8">🔴 High</div>
         </div>
@@ -477,11 +502,12 @@ async function filterCases(silent){
   if(!wrap||!pg)return;
   if(!data.rows?.length){wrap.innerHTML='<p style="color:#64748b">No cases found.</p>';pg.innerHTML='';return;}
   wrap.innerHTML=`<div class="tbl-wrap"><table>
-    <thead><tr><th>Case ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Subject</th><th>Priority</th><th>Status</th><th>Created</th>${canModify()?'<th>Actions</th>':''}</tr></thead>
+    <thead><tr><th>Case ID</th><th>Name</th><th>Email</th><th>Subject</th><th>Priority</th><th>Status</th><th>SLA</th><th>Created</th>${canModify()?'<th>Actions</th>':''}</tr></thead>
     <tbody>${data.rows.map(c=>`<tr>
       <td><a href="#" style="color:#60a5fa;white-space:nowrap" onclick="event.preventDefault();viewCase('${esc(c.case_id)}')">${esc(c.case_id)}</a></td>
-      <td style="white-space:nowrap">${esc(c.name)}</td><td>${esc(c.email)}</td><td style="white-space:nowrap">${esc(c.phone)}</td>
-      <td title="${esc(c.subject)}">${esc((c.subject||'').slice(0,30))}</td><td>${priorityBadge(c.priority)}</td><td>${badge(c.status)}</td>
+      <td style="white-space:nowrap">${esc(c.name)}</td><td>${esc(c.email)}</td>
+      <td title="${esc(c.subject)}">${esc((c.subject||'').slice(0,25))}</td><td>${priorityBadge(c.priority)}</td><td>${badge(c.status)}</td>
+      <td style="white-space:nowrap;color:${slaColor(c.created_at,c.status)}">⏱ ${slaTimer(c.created_at)}</td>
       <td style="white-space:nowrap">${fmtDate(c.created_at)}</td>
       ${canModify()?`<td style="white-space:nowrap">
         ${c.status!=='closed'?`<button class="btn btn-danger btn-sm" onclick="caseAction('close','${esc(c.case_id)}')">Close</button> `:''}
@@ -540,6 +566,7 @@ async function viewCase(caseId){
         <div>
           <div class="detail-row"><span class="key">Status</span>${badge(c.status)}</div>
           <div class="detail-row"><span class="key">Priority</span>${priorityBadge(c.priority)}</div>
+          <div class="detail-row"><span class="key">SLA Timer</span><span style="color:${slaColor(c.created_at,c.status)};font-weight:600">⏱ ${slaTimer(c.created_at)}</span></div>
           <div class="detail-row"><span class="key">Source</span>${esc(c.source)}</div>
           <div class="detail-row"><span class="key">Created</span>${fmtDate(c.created_at)}</div>
           <div class="detail-row"><span class="key">Updated</span>${fmtDate(c.updated_at)}</div>
@@ -570,8 +597,17 @@ async function viewCase(caseId){
           <button class="btn btn-sm" style="background:#22c55e;color:#fff" onclick="changePriority('${esc(c.case_id)}','low')">🟢 Low</button>
           <button class="btn btn-sm" style="background:#f59e0b;color:#fff" onclick="changePriority('${esc(c.case_id)}','medium')">🟡 Medium</button>
           <button class="btn btn-sm" style="background:#ef4444;color:#fff" onclick="changePriority('${esc(c.case_id)}','high')">🔴 High</button>
+          <button class="btn btn-sm" style="background:#9333ea;color:#fff" onclick="changePriority('${esc(c.case_id)}','urgent')">🟣 Urgent</button>
         </div>
       </div>
+      ${isSuperAdmin()?`
+      <div style="margin-top:20px;padding-top:16px;border-top:1px solid #334155">
+        <strong style="color:#ef4444">⚠️ Danger Zone</strong>
+        <div style="margin-top:8px">
+          <button class="btn btn-danger btn-sm" onclick="deleteCase('${esc(c.case_id)}')">🗑️ Delete Case</button>
+          <span style="color:#64748b;font-size:12px;margin-left:8px">This action cannot be undone.</span>
+        </div>
+      </div>`:''}
     </div>`:''}
     <div class="section-card">
       <strong>📝 Audit Trail</strong>
@@ -604,6 +640,15 @@ async function caseStatusChange(caseId,action){
 async function changePriority(caseId,priority){
   await api("PUT",`/cases/${caseId}/priority`,{priority});
   viewCase(caseId);
+}
+
+async function deleteCase(caseId){
+  if(!confirm(`⚠️ Are you sure you want to permanently delete case ${caseId}?\n\nThis action cannot be undone.`))return;
+  const res=await api("DELETE",`/cases/${caseId}`);
+  if(res?.ok){
+    alert("Case deleted successfully");
+    loadPage('cases');
+  }
 }
 
 async function addNote(id){const n=document.getElementById("note-text").value.trim();if(!n)return;await api("POST",`/cases/${id}/notes`,{note:n});viewCase(id);}

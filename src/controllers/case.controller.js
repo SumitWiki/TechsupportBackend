@@ -162,8 +162,8 @@ exports.updatePriority = async (req, res) => {
     const c = await Case.findByCaseId(req.params.caseId);
     if (!c) return res.status(404).json({ error: "Not found" });
     const { priority } = req.body;
-    if (!["low", "medium", "high"].includes(priority)) {
-      return res.status(400).json({ error: "Priority must be low, medium, or high" });
+    if (!["low", "medium", "high", "urgent"].includes(priority)) {
+      return res.status(400).json({ error: "Priority must be low, medium, high, or urgent" });
     }
     const oldPriority = c.priority || "medium";
     await Case.updatePriority(c.id, priority);
@@ -225,6 +225,44 @@ exports.recentAudit = async (req, res) => {
     const logs = await AuditLog.recent(parseInt(req.query.limit) || 200);
     res.json({ logs });
   } catch (err) {
+    res.status(500).json({ error: "Server error" });
+  }
+};
+
+// Mark case as OPEN
+exports.markOpen = async (req, res) => {
+  try {
+    const c = await Case.findByCaseId(req.params.caseId);
+    if (!c) return res.status(404).json({ error: "Not found" });
+    const oldStatus = c.status;
+    await Case.updateStatus(c.id, "open");
+    await AuditLog.record({ caseId: c.id, userId: req.user.id, action: "status_change", oldStatus, newStatus: "open" });
+    res.json({ ok: true, status: "open" });
+  } catch (err) {
+    res.status(500).json({ error: "Server error" });
+  }
+};
+
+// Delete case (Super Admin only)
+exports.deleteCase = async (req, res) => {
+  try {
+    const c = await Case.findByCaseId(req.params.caseId);
+    if (!c) return res.status(404).json({ error: "Not found" });
+    
+    // Log deletion before removing
+    await AuditLog.record({ 
+      caseId: c.id, 
+      userId: req.user.id, 
+      action: "deleted", 
+      oldStatus: c.status, 
+      newStatus: "deleted",
+      note: `Case ${c.case_id} deleted by ${req.user.name}`
+    });
+    
+    await Case.delete(c.id);
+    res.json({ ok: true, message: "Case deleted successfully" });
+  } catch (err) {
+    console.error("deleteCase:", err);
     res.status(500).json({ error: "Server error" });
   }
 };

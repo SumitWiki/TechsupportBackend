@@ -93,12 +93,16 @@ const Case = {
          SUM(status='in_progress') as in_progress,
          SUM(status='closed')      as closed,
          SUM(status='reopened')    as reopened,
-         SUM(priority='high')      as high_priority,
-         SUM(priority='medium')    as medium_priority,
-         SUM(priority='low')       as low_priority
+         SUM(priority='urgent')    as urgent,
+         SUM(priority='high')      as high,
+         SUM(priority='medium')    as medium,
+         SUM(priority='low')       as low
        FROM cases`
     );
     return rows[0];
+  },
+  async delete(id) {
+    await db.query("DELETE FROM cases WHERE id = ?", [id]);
   },
 };
 

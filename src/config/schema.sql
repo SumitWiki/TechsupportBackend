@@ -83,7 +83,7 @@ CREATE TABLE IF NOT EXISTS cases (
   subject      VARCHAR(255) NOT NULL,
   message      TEXT         NOT NULL,
   status       ENUM('open','in_progress','closed','reopened') NOT NULL DEFAULT 'open',
-  priority     ENUM('low','medium','high') NOT NULL DEFAULT 'medium',
+  priority     ENUM('low','medium','high','urgent') NOT NULL DEFAULT 'medium',
   source       ENUM('contact_form','manual','crm_manual') NOT NULL DEFAULT 'contact_form',
   assigned_to  INT UNSIGNED NULL,
   closed_at    DATETIME     NULL,
