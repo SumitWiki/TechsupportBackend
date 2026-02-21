@@ -151,9 +151,25 @@ tr:hover td{background:#1e3a5f}
     <div class="nav-right">
       <span class="live-dot"></span>
       <span id="user-info"></span>
+      <button id="pwd-btn" onclick="showGlobalPwdModal()" style="background:#3b82f6;border:none;color:#fff;padding:6px 14px;border-radius:6px;font-size:13px;margin-right:4px" title="Change Password">🔒</button>
       <button id="logout-btn" onclick="doLogout()">Logout</button>
     </div>
   </nav>
+  <!-- Global Change Password Modal -->
+  <div id="global-pwd-modal" class="hidden" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:200;display:flex;align-items:center;justify-content:center">
+    <div style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:24px;width:100%;max-width:400px">
+      <h3 style="color:#f1f5f9;margin:0 0 16px">🔒 Change My Password</h3>
+      <div class="form-group"><label class="fl">Current Password</label><input type="password" id="gcp-current"/></div>
+      <div class="form-group"><label class="fl">New Password</label><input type="password" id="gcp-new"/></div>
+      <div class="form-group"><label class="fl">Confirm New Password</label><input type="password" id="gcp-confirm"/></div>
+      <div style="display:flex;gap:8px;margin-top:16px">
+        <button class="btn btn-primary" onclick="doChangeGlobalPwd()">Change Password</button>
+        <button class="btn btn-outline" onclick="hideGlobalPwdModal()">Cancel</button>
+      </div>
+      <div class="err hidden" id="gcp-err" style="margin-top:8px"></div>
+      <div class="ok hidden" id="gcp-ok" style="margin-top:8px"></div>
+    </div>
+  </div>
   <div id="main-area">
     <div id="sidebar-overlay" onclick="toggleSidebar()"></div>
     <div id="sidebar">
@@ -201,6 +217,11 @@ async function api(method,path,body){
 function showErr(id,msg){const el=document.getElementById(id);if(el){el.textContent=msg;el.classList.remove("hidden");}}
 function clearErr(id){const el=document.getElementById(id);if(el){el.textContent="";el.classList.add("hidden");}}
 function badge(s){return`<span class="badge badge-${s}">${(s||'').replace(/_/g," ")}</span>`;}
+function priorityBadge(p){
+  const colors={low:'#22c55e',medium:'#f59e0b',high:'#ef4444'};
+  const c=colors[p]||'#94a3b8';
+  return`<span style="background:${c};color:#fff;padding:2px 8px;border-radius:4px;font-size:0.75em;font-weight:600;text-transform:uppercase">${p||'medium'}</span>`;
+}
 function fmtDate(d){return d?new Date(d).toLocaleString("en-IN",{dateStyle:"medium",timeStyle:"short"}):"—";}
 function esc(s){return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
 function toggleEl(id){document.getElementById(id).classList.toggle("hidden");}
@@ -329,57 +350,62 @@ async function pageDashboard(el,silent){
       <div class="stat-card"><div class="val" style="color:#6ee7b7">${s.closed||0}</div><div class="lbl">Closed</div></div>
       <div class="stat-card"><div class="val" style="color:#fbbf24">${s.reopened||0}</div><div class="lbl">Reopened</div></div>
     </div>
+    <div class="section-card" style="margin-top:16px">
+      <strong>📊 Priority Breakdown</strong>
+      <div style="margin-top:12px;display:flex;gap:16px;flex-wrap:wrap">
+        <div style="text-align:center">
+          <div style="font-size:1.5em;font-weight:600;color:#ef4444">${s.high||0}</div>
+          <div style="font-size:0.75em;color:#94a3b8">🔴 High</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:1.5em;font-weight:600;color:#f59e0b">${s.medium||0}</div>
+          <div style="font-size:0.75em;color:#94a3b8">🟡 Medium</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:1.5em;font-weight:600;color:#22c55e">${s.low||0}</div>
+          <div style="font-size:0.75em;color:#94a3b8">🟢 Low</div>
+        </div>
+      </div>
+    </div>
     <div class="section-card">
       <p style="color:#64748b;font-size:14px">Welcome back, <strong style="color:#f1f5f9">${esc(currentUser.name)}</strong> ${roleDisplay}</p>
       <p style="color:#475569;font-size:12px;margin-top:4px">Your permissions: ${Object.entries(currentUser.permissions||{}).filter(([,v])=>v).map(([k])=>`<span class="badge badge-success">${k}</span>`).join(" ")||'read-only'}</p>
       <p style="color:#64748b;font-size:12px;margin-top:8px">Auto-refreshes every 10 seconds.</p>
-    </div>
-    <div class="section-card">
-      <strong>🔒 Account Security</strong>
-      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-primary btn-sm" onclick="showChangePasswordModal()">Change My Password</button>
-      </div>
-    </div>
-    <div id="change-pwd-modal" class="section-card hidden">
-      <strong>Change My Password</strong>
-      <div style="margin-top:12px">
-        <div class="form-group"><label class="fl">Current Password *</label><input type="password" id="cp-current"/></div>
-        <div class="form-group"><label class="fl">New Password *</label><input type="password" id="cp-new"/></div>
-        <div class="form-group"><label class="fl">Confirm New Password *</label><input type="password" id="cp-confirm"/></div>
-      </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-primary btn-sm" onclick="changeMyPassword()">Change Password</button>
-        <button class="btn btn-outline btn-sm" onclick="toggleEl('change-pwd-modal')">Cancel</button>
-      </div>
-      <div class="err hidden" id="cp-err"></div>
-      <div class="ok hidden" id="cp-ok"></div>
     </div>`;
 }
 
-function showChangePasswordModal(){
-  document.getElementById("change-pwd-modal").classList.remove("hidden");
-  document.getElementById("cp-current").value="";
-  document.getElementById("cp-new").value="";
-  document.getElementById("cp-confirm").value="";
-  clearErr("cp-err");clearErr("cp-ok");
+/* ══════════════════════════════════════════════════════════════════════════
+   GLOBAL PASSWORD MODAL (Navbar Button)
+   ══════════════════════════════════════════════════════════════════════ */
+function showGlobalPwdModal(){
+  document.getElementById("global-pwd-modal").classList.remove("hidden");
+  document.getElementById("gcp-current").value="";
+  document.getElementById("gcp-new").value="";
+  document.getElementById("gcp-confirm").value="";
+  clearErr("gcp-err");clearErr("gcp-ok");
 }
 
-async function changeMyPassword(){
-  clearErr("cp-err");clearErr("cp-ok");
-  const current=document.getElementById("cp-current").value;
-  const newPwd=document.getElementById("cp-new").value;
-  const confirm=document.getElementById("cp-confirm").value;
-  if(!current||!newPwd||!confirm)return showErr("cp-err","All fields are required");
-  if(newPwd!==confirm)return showErr("cp-err","New passwords do not match");
-  if(newPwd.length<8)return showErr("cp-err","Password must be at least 8 characters");
+function hideGlobalPwdModal(){
+  document.getElementById("global-pwd-modal").classList.add("hidden");
+}
+
+async function doChangeGlobalPwd(){
+  clearErr("gcp-err");clearErr("gcp-ok");
+  const current=document.getElementById("gcp-current").value;
+  const newPwd=document.getElementById("gcp-new").value;
+  const confirm=document.getElementById("gcp-confirm").value;
+  if(!current||!newPwd||!confirm)return showErr("gcp-err","All fields are required");
+  if(newPwd!==confirm)return showErr("gcp-err","New passwords do not match");
+  if(newPwd.length<8)return showErr("gcp-err","Password must be at least 8 characters");
   const res=await api("PUT","/users/me/password",{currentPassword:current,newPassword:newPwd});
   if(res?.ok){
-    document.getElementById("cp-ok").textContent="✅ Password changed successfully!";
-    document.getElementById("cp-ok").classList.remove("hidden");
-    document.getElementById("cp-current").value="";
-    document.getElementById("cp-new").value="";
-    document.getElementById("cp-confirm").value="";
-  }else if(res)showErr("cp-err",res.error||"Failed");
+    document.getElementById("gcp-ok").textContent="✅ Password changed successfully!";
+    document.getElementById("gcp-ok").classList.remove("hidden");
+    document.getElementById("gcp-current").value="";
+    document.getElementById("gcp-new").value="";
+    document.getElementById("gcp-confirm").value="";
+    setTimeout(()=>hideGlobalPwdModal(),1500);
+  }else if(res)showErr("gcp-err",res.error||"Failed");
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -451,11 +477,11 @@ async function filterCases(silent){
   if(!wrap||!pg)return;
   if(!data.rows?.length){wrap.innerHTML='<p style="color:#64748b">No cases found.</p>';pg.innerHTML='';return;}
   wrap.innerHTML=`<div class="tbl-wrap"><table>
-    <thead><tr><th>Case ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Subject</th><th>Status</th><th>Created</th>${canModify()?'<th>Actions</th>':''}</tr></thead>
+    <thead><tr><th>Case ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Subject</th><th>Priority</th><th>Status</th><th>Created</th>${canModify()?'<th>Actions</th>':''}</tr></thead>
     <tbody>${data.rows.map(c=>`<tr>
       <td><a href="#" style="color:#60a5fa;white-space:nowrap" onclick="event.preventDefault();viewCase('${esc(c.case_id)}')">${esc(c.case_id)}</a></td>
       <td style="white-space:nowrap">${esc(c.name)}</td><td>${esc(c.email)}</td><td style="white-space:nowrap">${esc(c.phone)}</td>
-      <td title="${esc(c.subject)}">${esc((c.subject||'').slice(0,30))}</td><td>${badge(c.status)}</td>
+      <td title="${esc(c.subject)}">${esc((c.subject||'').slice(0,30))}</td><td>${priorityBadge(c.priority)}</td><td>${badge(c.status)}</td>
       <td style="white-space:nowrap">${fmtDate(c.created_at)}</td>
       ${canModify()?`<td style="white-space:nowrap">
         ${c.status!=='closed'?`<button class="btn btn-danger btn-sm" onclick="caseAction('close','${esc(c.case_id)}')">Close</button> `:''}
@@ -513,6 +539,7 @@ async function viewCase(caseId){
       <div class="grid-2">
         <div>
           <div class="detail-row"><span class="key">Status</span>${badge(c.status)}</div>
+          <div class="detail-row"><span class="key">Priority</span>${priorityBadge(c.priority)}</div>
           <div class="detail-row"><span class="key">Source</span>${esc(c.source)}</div>
           <div class="detail-row"><span class="key">Created</span>${fmtDate(c.created_at)}</div>
           <div class="detail-row"><span class="key">Updated</span>${fmtDate(c.updated_at)}</div>
@@ -531,11 +558,19 @@ async function viewCase(caseId){
     ${canModify()?`
     <div class="section-card">
       <strong>Actions</strong>
-      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         ${c.status!=='open'?`<button class="btn btn-primary btn-sm" onclick="caseStatusChange('${esc(c.case_id)}','open')">Mark Open</button>`:''}
         ${c.status!=='in_progress'?`<button class="btn btn-warning btn-sm" onclick="caseStatusChange('${esc(c.case_id)}','in_progress')">Mark In Progress</button>`:''}
         ${c.status!=='closed'?`<button class="btn btn-danger btn-sm" onclick="caseStatusChange('${esc(c.case_id)}','close')">Close Case</button>`:''}
         ${c.status==='closed'?`<button class="btn btn-success btn-sm" onclick="caseStatusChange('${esc(c.case_id)}','reopen')">Reopen Case</button>`:''}
+      </div>
+      <div style="margin-top:16px">
+        <strong>Change Priority:</strong>
+        <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-sm" style="background:#22c55e;color:#fff" onclick="changePriority('${esc(c.case_id)}','low')">🟢 Low</button>
+          <button class="btn btn-sm" style="background:#f59e0b;color:#fff" onclick="changePriority('${esc(c.case_id)}','medium')">🟡 Medium</button>
+          <button class="btn btn-sm" style="background:#ef4444;color:#fff" onclick="changePriority('${esc(c.case_id)}','high')">🔴 High</button>
+        </div>
       </div>
     </div>`:''}
     <div class="section-card">
@@ -559,15 +594,18 @@ async function viewCase(caseId){
 
 async function caseStatusChange(caseId,action){
   if(action==='in_progress'){
-    /* For in_progress we need a custom PUT since we don't have a dedicated route — use assign to self */
-    /* Actually we can just use close/reopen pattern. Let's add a generic status route or use close/reopen. */
-    /* For now treat in_progress as assign-to-self */
-    await api("PUT",`/cases/${caseId}/assign`,{userId:currentUser.id});
+    await api("PUT",`/cases/${caseId}/in-progress`);
   }else{
     await api("PUT",`/cases/${caseId}/${action}`);
   }
   viewCase(caseId);
 }
+
+async function changePriority(caseId,priority){
+  await api("PUT",`/cases/${caseId}/priority`,{priority});
+  viewCase(caseId);
+}
+
 async function addNote(id){const n=document.getElementById("note-text").value.trim();if(!n)return;await api("POST",`/cases/${id}/notes`,{note:n});viewCase(id);}
 
 /* ══════════════════════════════════════════════════════════════════════════

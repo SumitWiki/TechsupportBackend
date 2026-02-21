@@ -10,12 +10,12 @@ function generateCaseId() {
 }
 
 const Case = {
-  async create({ name, email, phone, subject, message, customer_id, source }) {
+  async create({ name, email, phone, subject, message, customer_id, source, priority }) {
     const caseId = generateCaseId();
     const [result] = await db.query(
-      `INSERT INTO cases (case_id, name, email, phone, subject, message, customer_id, source)
-       VALUES (?,?,?,?,?,?,?,?)`,
-      [caseId, name, email, phone, subject, message, customer_id || null, source || "contact_form"]
+      `INSERT INTO cases (case_id, name, email, phone, subject, message, customer_id, source, priority)
+       VALUES (?,?,?,?,?,?,?,?,?)`,
+      [caseId, name, email, phone, subject, message, customer_id || null, source || "contact_form", priority || "medium"]
     );
     return { id: result.insertId, caseId };
   },
@@ -64,6 +64,9 @@ const Case = {
     const extra = status === "closed" ? ", closed_at = NOW()" : (status === "reopened" ? ", closed_at = NULL" : "");
     await db.query(`UPDATE cases SET status = ? ${extra} WHERE id = ?`, [status, id]);
   },
+  async updatePriority(id, priority) {
+    await db.query("UPDATE cases SET priority = ? WHERE id = ?", [priority, id]);
+  },
   async assign(id, userId) {
     await db.query("UPDATE cases SET assigned_to = ?, status = 'in_progress' WHERE id = ?", [userId, id]);
   },
@@ -89,7 +92,10 @@ const Case = {
          SUM(status='open')        as open,
          SUM(status='in_progress') as in_progress,
          SUM(status='closed')      as closed,
-         SUM(status='reopened')    as reopened
+         SUM(status='reopened')    as reopened,
+         SUM(priority='high')      as high_priority,
+         SUM(priority='medium')    as medium_priority,
+         SUM(priority='low')       as low_priority
        FROM cases`
     );
     return rows[0];

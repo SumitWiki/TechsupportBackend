@@ -18,6 +18,8 @@ router.get  ("/:caseId",               requirePerm('read'),   ctrl.getCase);
 router.get  ("/:caseId/audit",         requirePerm('read'),   ctrl.getAuditLog);    // case audit trail
 router.put  ("/:caseId/close",         requirePerm('modify'), ctrl.closeCase);
 router.put  ("/:caseId/reopen",        requirePerm('modify'), ctrl.reopenCase);
+router.put  ("/:caseId/in-progress",   requirePerm('modify'), ctrl.markInProgress); // mark in progress
+router.put  ("/:caseId/priority",      requirePerm('modify'), ctrl.updatePriority); // change priority
 router.put  ("/:caseId/assign",        requireAdmin,          ctrl.assignCase);     // admin only
 router.post ("/:caseId/notes",         requirePerm('write'),  ctrl.addNote);
 

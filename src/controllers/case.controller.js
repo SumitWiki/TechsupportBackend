@@ -157,6 +157,37 @@ exports.assignCase = async (req, res) => {
   }
 };
 
+exports.updatePriority = async (req, res) => {
+  try {
+    const c = await Case.findByCaseId(req.params.caseId);
+    if (!c) return res.status(404).json({ error: "Not found" });
+    const { priority } = req.body;
+    if (!["low", "medium", "high"].includes(priority)) {
+      return res.status(400).json({ error: "Priority must be low, medium, or high" });
+    }
+    const oldPriority = c.priority || "medium";
+    await Case.updatePriority(c.id, priority);
+    await AuditLog.record({ caseId: c.id, userId: req.user.id, action: "priority_change", oldStatus: oldPriority, newStatus: priority, note: `Priority changed from ${oldPriority} to ${priority}` });
+    res.json({ ok: true, priority });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+};
+
+exports.markInProgress = async (req, res) => {
+  try {
+    const c = await Case.findByCaseId(req.params.caseId);
+    if (!c) return res.status(404).json({ error: "Not found" });
+    const oldStatus = c.status;
+    await Case.updateStatus(c.id, "in_progress");
+    await AuditLog.record({ caseId: c.id, userId: req.user.id, action: "status_change", oldStatus, newStatus: "in_progress" });
+    res.json({ ok: true, status: "in_progress" });
+  } catch (err) {
+    res.status(500).json({ error: "Server error" });
+  }
+};
+
 exports.addNote = async (req, res) => {
   try {
     const c = await Case.findByCaseId(req.params.caseId);
