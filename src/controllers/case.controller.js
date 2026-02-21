@@ -19,17 +19,21 @@ exports.createFromContact = async (req, res) => {
     console.log("📩 [createFromContact] Received request:", { name: req.body.name, email: req.body.email, phone: req.body.phone });
     
     const { name, email, phone, subject, message } = req.body;
-    if (!name || !email || !message) return res.status(400).json({ error: "name, email and message are required" });
+    if (!name || !email || !phone || !message) return res.status(400).json({ error: "name, email, phone and message are required" });
 
     // Basic email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) return res.status(400).json({ error: "Invalid email address" });
 
+    // Phone validation: must start with +1 and have exactly 10 digits after
+    if (!/^\+1\d{10}$/.test(phone.trim())) {
+      return res.status(400).json({ error: "Phone must start with +1 and contain exactly 10 digits after. Only digits and + allowed." });
+    }
+
     // Length limits
     if (name.length > 150) return res.status(400).json({ error: "Name too long" });
     if (message.length > 5000) return res.status(400).json({ error: "Message too long (max 5000 chars)" });
     if (subject && subject.length > 255) return res.status(400).json({ error: "Subject too long" });
-    if (phone && !/^[\d\s\-+().]+$/.test(phone)) return res.status(400).json({ error: "Phone must contain only digits and standard characters" });
 
     let dbResult;
     try {
