@@ -739,7 +739,6 @@ async function forceLogout(id,name){
   if(res?.ok)alert(`✅ ${name} has been logged out.`);
   else if(res)alert(res.error||"Failed");
 }
-}
 
 function roleChanged(){
   const role=document.getElementById("u-role").value;
