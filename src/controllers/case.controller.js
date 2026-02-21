@@ -31,14 +31,20 @@ exports.createFromContact = async (req, res) => {
     if (subject && subject.length > 255) return res.status(400).json({ error: "Subject too long" });
     if (phone && !/^[\d\s\-+().]+$/.test(phone)) return res.status(400).json({ error: "Phone must contain only digits and standard characters" });
 
-    const { id, caseId } = await Case.create({
-      name, email,
-      phone:   phone   || "N/A",
-      subject: subject || "General Enquiry",
-      message,
-      source:  "contact_form",
-    });
-    
+    let dbResult;
+    try {
+      dbResult = await Case.create({
+        name, email,
+        phone:   phone   || "N/A",
+        subject: subject || "General Enquiry",
+        message,
+        source:  "contact_form",
+      });
+    } catch (dbErr) {
+      console.error("❌ [createFromContact] DB insert failed:", dbErr);
+      return res.status(500).json({ error: "Failed to save ticket. Please try again later." });
+    }
+    const { id, caseId } = dbResult;
     console.log(`✅ [createFromContact] Case created in DB: ${caseId} (ID: ${id})`);
 
     // Email to admin — all user data HTML-escaped
