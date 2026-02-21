@@ -130,25 +130,30 @@ exports.verifyOtp = async (req, res) => {
       status: "success",
     });
 
-    // Send login notification email
-    const now = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
-    await sendMail({
-      to: user.email,
-      subject: "TechSupport4 CRM — New Login Detected",
-      html: `
-        <div style="font-family:sans-serif;max-width:480px;margin:auto">
-          <h2 style="color:#1e40af">Login Alert</h2>
-          <p>Hi <strong>${esc(user.name)}</strong>, a successful login was recorded:</p>
-          <table style="width:100%;border-collapse:collapse;font-size:14px">
-            <tr><td style="padding:6px;color:#64748b">Time</td><td>${esc(now)} IST</td></tr>
-            <tr><td style="padding:6px;color:#64748b">IP</td><td>${esc(ip)}</td></tr>
-            <tr><td style="padding:6px;color:#64748b">Location</td><td>${esc(geo.city)}, ${esc(geo.region)}, ${esc(geo.country)}</td></tr>
-            <tr><td style="padding:6px;color:#64748b">Device</td><td style="font-size:12px">${esc(req.headers["user-agent"]?.slice(0, 100))}</td></tr>
-          </table>
-          <p style="color:#ef4444;font-size:13px">If this wasn't you, contact admin immediately.</p>
-        </div>
-      `,
-    });
+    // Send login notification email — wrapped in try/catch so verification succeeds even if SMTP fails
+    try {
+      const now = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
+      await sendMail({
+        to: user.email,
+        subject: "TechSupport4 CRM — New Login Detected",
+        html: `
+          <div style="font-family:sans-serif;max-width:480px;margin:auto">
+            <h2 style="color:#1e40af">Login Alert</h2>
+            <p>Hi <strong>${esc(user.name)}</strong>, a successful login was recorded:</p>
+            <table style="width:100%;border-collapse:collapse;font-size:14px">
+              <tr><td style="padding:6px;color:#64748b">Time</td><td>${esc(now)} IST</td></tr>
+              <tr><td style="padding:6px;color:#64748b">IP</td><td>${esc(ip)}</td></tr>
+              <tr><td style="padding:6px;color:#64748b">Location</td><td>${esc(geo.city)}, ${esc(geo.region)}, ${esc(geo.country)}</td></tr>
+              <tr><td style="padding:6px;color:#64748b">Device</td><td style="font-size:12px">${esc(req.headers["user-agent"]?.slice(0, 100))}</td></tr>
+            </table>
+            <p style="color:#ef4444;font-size:13px">If this wasn't you, contact admin immediately.</p>
+          </div>
+        `,
+      });
+    } catch (mailErr) {
+      console.error("⚠️  Login notification email failed (SMTP error):", mailErr.message);
+      // Don't block login — user is already verified
+    }
 
     // Issue JWT — NO fallback secret, env must be set
     const expiresIn = process.env.JWT_EXPIRES_IN || "8h";
