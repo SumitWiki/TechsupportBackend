@@ -11,13 +11,19 @@ function generateCaseId() {
 
 const Case = {
   async create({ name, email, phone, subject, message, customer_id, source, priority }) {
-    const caseId = generateCaseId();
+    // Insert with a temporary case_id, will update after insert
+    const tempCaseId = "TEMP";
     const [result] = await db.query(
       `INSERT INTO cases (case_id, name, email, phone, subject, message, customer_id, source, priority)
        VALUES (?,?,?,?,?,?,?,?,?)`,
-      [caseId, name, email, phone, subject, message, customer_id || null, source || "contact_form", priority || "medium"]
+      [tempCaseId, name, email, phone, subject, message, customer_id || null, source || "contact_form", priority || "medium"]
     );
-    return { id: result.insertId, caseId };
+    const dbId = result.insertId;
+    const serialNumber = 100000000 + dbId;
+    const caseId = `TS4-${serialNumber}-ORG`;
+    // Update the case_id to the serial format
+    await db.query(`UPDATE cases SET case_id = ? WHERE id = ?`, [caseId, dbId]);
+    return { id: dbId, caseId };
   },
   async findById(id) {
     const [rows] = await db.query(
