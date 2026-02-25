@@ -51,6 +51,31 @@ exports.createFromContact = async (req, res) => {
     const { id, caseId } = dbResult;
     console.log(`✅ [createFromContact] Case created in DB: ${caseId} (ID: ${id})`);
 
+    // Send confirmation email
+try {
+  console.log("📧 Attempting to send confirmation email...");
+
+  await sendMail({
+    to: email,
+    subject: `Your Support Ticket ${caseId} - TechSupport4`,
+    html: `
+      <h2>Thank You for Contacting TechSupport4</h2>
+      <p>Hello ${esc(name)},</p>
+      <p>Your support ticket has been created successfully.</p>
+      <p><strong>Case ID:</strong> ${esc(caseId)}</p>
+      <p>Our team will contact you shortly.</p>
+      <br/>
+      <p>Best Regards,<br/>TechSupport4 Team</p>
+    `
+  });
+
+  console.log("✅ Confirmation email sent successfully");
+
+} catch (mailErr) {
+  console.error("❌ Email sending failed:", mailErr);
+}
+
+
     // No email sending for contact form submissions
     return res.status(201).json({ ok: true, caseId, id });
   } catch (err) {
