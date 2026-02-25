@@ -1,8 +1,4 @@
-require("dotenv").config({ path: __dirname + "/.env" });
-// require("dotenv").config();
-console.log("SMTP_HOST:", process.env.SMTP_HOST); // temp added for the test
-console.log("SMTP_USER:", process.env.SMTP_USER); //added temp
-console.log("SMTP_PASS:", process.env.SMTP_PASS ? "Loaded" : "Missing"); //temp added  
+require("dotenv").config(); 
 const express      = require("express");
 const cors         = require("cors");
 const helmet       = require("helmet");
