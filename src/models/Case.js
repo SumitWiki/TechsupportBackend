@@ -11,19 +11,27 @@ function generateCaseId() {
 
 const Case = {
   async create({ name, email, phone, subject, message, customer_id, source, priority }) {
-    // Insert with a temporary case_id, will update after insert
-    const tempCaseId = "TEMP";
-    const [result] = await db.query(
-      `INSERT INTO cases (case_id, name, email, phone, subject, message, customer_id, source, priority)
-       VALUES (?,?,?,?,?,?,?,?,?)`,
-      [tempCaseId, name, email, phone, subject, message, customer_id || null, source || "contact_form", priority || "medium"]
-    );
-    const dbId = result.insertId;
-    const serialNumber = 100000000 + dbId;
-    const caseId = `TS4-${serialNumber}-ORG`;
-    // Update the case_id to the serial format
-    await db.query(`UPDATE cases SET case_id = ? WHERE id = ?`, [caseId, dbId]);
-    return { id: dbId, caseId };
+    const conn = await db.getConnection();
+    try {
+      await conn.beginTransaction();
+      const tempCaseId = "TEMP";
+      const [result] = await conn.query(
+        `INSERT INTO cases (case_id, name, email, phone, subject, message, customer_id, source, priority)
+         VALUES (?,?,?,?,?,?,?,?,?)`,
+        [tempCaseId, name, email, phone, subject, message, customer_id || null, source || "contact_form", priority || "medium"]
+      );
+      const dbId = result.insertId;
+      const serialNumber = 100000000 + dbId;
+      const caseId = `TS4-${serialNumber}-ORG`;
+      await conn.query(`UPDATE cases SET case_id = ? WHERE id = ?`, [caseId, dbId]);
+      await conn.commit();
+      return { id: dbId, caseId };
+    } catch (err) {
+      await conn.rollback();
+      throw err;
+    } finally {
+      conn.release();
+    }
   },
   async findById(id) {
     const [rows] = await db.query(

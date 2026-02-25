@@ -8,6 +8,11 @@ const fs    = require("fs");
 const path  = require("path");
 
 async function setup() {
+  if (!process.env.DB_HOST || !process.env.DB_USER) {
+    console.error("❌ DB_HOST and DB_USER must be set in .env");
+    process.exit(1);
+  }
+
   const conn = await mysql.createConnection({
     host:     process.env.DB_HOST,
     port:     parseInt(process.env.DB_PORT) || 3306,
@@ -15,11 +20,6 @@ async function setup() {
     password: process.env.DB_PASSWORD,
     multipleStatements: true,
   });
-
-  if (!process.env.DB_HOST || !process.env.DB_USER) {
-    console.error("❌ DB_HOST and DB_USER must be set in .env");
-    process.exit(1);
-  }
 
   const sql = fs.readFileSync(path.join(__dirname, "schema.sql"), "utf8");
 

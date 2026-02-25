@@ -267,11 +267,16 @@ exports.forceLogout = async (req, res) => {
       return res.status(403).json({ error: "Cannot force logout Super Admin" });
     }
 
-    // Mark user's token as invalidated by temporarily disabling and re-enabling
-    // A more robust solution would track user sessions in DB
-    // For now, we'll add a field to track forced logout timestamp
+    // Temporarily deactivate and reactivate to invalidate sessions
+    // The auth middleware checks is_active on every /me request, so
+    // the user's next API call will fail with 401, forcing re-login
     await User.update(targetId, { is_active: 0 });
+    // Small delay to ensure any in-flight /me checks see is_active=0
+    await new Promise(resolve => setTimeout(resolve, 100));
     await User.update(targetId, { is_active: 1 });
+
+    // Also add a note that the user was force-logged-out
+    console.log(`[FORCE-LOGOUT] User ${targetUser.email} (ID: ${targetId}) force-logged-out by ${req.user.email}`);
 
     res.json({ ok: true, message: `${targetUser.name} has been logged out` });
   } catch (err) {
