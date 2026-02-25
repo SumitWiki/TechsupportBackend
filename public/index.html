@@ -4,6 +4,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>TechSupport4 CRM</title>
+<script src="https://sdk.twilio.com/js/client/releases/1.14.3/twilio.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Segoe UI',system-ui,sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh}
@@ -118,6 +119,30 @@ tr:hover td{background:#1e3a5f}
   .auth-card{padding:24px;margin:12px}
   .perm-row{gap:8px}
 }
+
+/* ── Twilio Call UI ── */
+#call-popup{position:fixed;top:70px;right:20px;width:340px;background:#1e293b;border:2px solid #3b82f6;border-radius:16px;padding:20px;z-index:300;box-shadow:0 20px 60px rgba(0,0,0,0.5);animation:slideIn .3s ease;display:none}
+#call-popup.ringing{border-color:#22c55e;animation:slideIn .3s ease,ringPulse 1s infinite}
+#call-popup .call-header{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+#call-popup .call-icon{width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:24px}
+#call-popup .call-icon.incoming{background:#22c55e}
+#call-popup .call-icon.active{background:#3b82f6}
+#call-popup .call-icon.ended{background:#64748b}
+#call-popup .caller-info{flex:1}
+#call-popup .caller-name{font-size:16px;font-weight:700;color:#f1f5f9}
+#call-popup .caller-number{font-size:13px;color:#94a3b8}
+#call-popup .call-status{font-size:12px;color:#60a5fa;margin-top:2px}
+#call-popup .call-timer{font-size:24px;font-weight:700;color:#60a5fa;text-align:center;margin:12px 0;font-variant-numeric:tabular-nums}
+#call-popup .call-actions{display:flex;gap:8px;justify-content:center}
+#call-popup .call-btn{width:56px;height:56px;border-radius:50%;border:none;font-size:24px;cursor:pointer;transition:.15s}
+#call-popup .call-btn:hover{transform:scale(1.1)}
+.call-btn-accept{background:#22c55e;color:#fff}
+.call-btn-reject{background:#ef4444;color:#fff}
+.call-btn-mute{background:#475569;color:#fff}
+.call-btn-mute.active{background:#f59e0b;color:#000}
+#call-indicator{display:none;align-items:center;gap:6px;background:#22c55e;color:#fff;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;margin-right:8px;animation:pulse 1.5s infinite}
+@keyframes slideIn{from{opacity:0;transform:translateY(-20px)}to{opacity:1;transform:translateY(0)}}
+@keyframes ringPulse{0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,0.4)}50%{box-shadow:0 0 0 12px rgba(34,197,94,0)}}
 </style>
 </head>
 <body>
@@ -149,6 +174,7 @@ tr:hover td{background:#1e3a5f}
       <span class="brand">⚡ TS4 CRM</span>
     </div>
     <div class="nav-right">
+      <div id="call-indicator" onclick="showCallPopup()" title="Active Call">📞 <span id="call-indicator-timer">00:00</span></div>
       <span class="live-dot"></span>
       <span id="user-info"></span>
       <button id="pwd-btn" onclick="showGlobalPwdModal()" style="background:#3b82f6;border:none;color:#fff;padding:6px 14px;border-radius:6px;font-size:13px;margin-right:4px" title="Change Password">🔒</button>
@@ -175,6 +201,7 @@ tr:hover td{background:#1e3a5f}
     <div id="sidebar">
       <div class="nav-item active" data-page="dashboard">📊 Dashboard</div>
       <div class="nav-item" data-page="cases">🎫 Cases</div>
+      <div class="nav-item" data-page="calls">📞 Calls</div>
       <div class="nav-item" data-page="customers">👥 Customers</div>
       <div class="nav-item admin-only" data-page="users">🔑 Users</div>
       <div class="nav-item admin-only" data-page="audit">📝 Audit Log</div>
@@ -183,6 +210,29 @@ tr:hover td{background:#1e3a5f}
     <div id="content"></div>
   </div>
 </div>
+
+<!-- ═══════════════════════════════════ CALL POPUP ════════════════════════ -->
+<div id="call-popup">
+  <div class="call-header">
+    <div class="call-icon incoming" id="call-icon">📞</div>
+    <div class="caller-info">
+      <div class="caller-name" id="caller-name">Unknown Caller</div>
+      <div class="caller-number" id="caller-number">+1 XXX XXX XXXX</div>
+      <div class="call-status" id="call-popup-status">Incoming Call…</div>
+    </div>
+    <button onclick="hideCallPopup()" style="background:none;border:none;color:#64748b;font-size:18px;cursor:pointer">✕</button>
+  </div>
+  <div class="call-timer" id="call-timer">00:00</div>
+  <div class="call-actions" id="call-actions">
+    <button class="call-btn call-btn-accept" id="btn-accept" onclick="acceptCall()" title="Accept">📞</button>
+    <button class="call-btn call-btn-mute" id="btn-mute" onclick="toggleMute()" title="Mute" style="display:none">🔇</button>
+    <button class="call-btn call-btn-reject" id="btn-reject" onclick="rejectCall()" title="Reject / Hang Up">📵</button>
+  </div>
+</div>
+<!-- Ringtone audio (plays on incoming call) -->
+<audio id="ringtone" loop preload="auto">
+  <source src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=" type="audio/wav"/>
+</audio>
 
 <script>
 /* ── Block console API access in production ── */
@@ -204,6 +254,14 @@ let casesPage=1;
 const PER_PAGE=20;
 let _pollTimer=null;
 let _currentPage="dashboard";
+
+/* ── Twilio Voice State ── */
+let twilioDevice=null;
+let activeConnection=null;
+let callTimerInterval=null;
+let callStartTime=null;
+let isMuted=false;
+let twilioConfigured=false;
 
 /* ══════════════════════════════════════════════════════════════════════════
    HELPERS
@@ -340,6 +398,7 @@ function initApp(){
   });
   loadPage("dashboard");
   startPolling();
+  initTwilio(); // Initialize Twilio Voice SDK
 }
 
 async function loadPage(name){
@@ -348,6 +407,7 @@ async function loadPage(name){
   el.innerHTML='<p style="color:#64748b;padding:24px">Loading…</p>';
   if(name==="dashboard")await pageDashboard(el);
   if(name==="cases")await pageCases(el);
+  if(name==="calls")await pageCalls(el);
   if(name==="customers")await pageCustomers(el);
   if(name==="users")await pageUsers(el);
   if(name==="audit")await pageAudit(el);
@@ -923,6 +983,323 @@ async function pageLogs(el){
         <td>${badge(l.status==='success'?'success':'open')}</td>
         <td style="white-space:nowrap">${fmtDate(l.logged_at)}</td>
       </tr>`).join("")||'<tr><td colspan="6" style="color:#64748b">No logs yet.</td></tr>'}</tbody></table></div></div>`;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   TWILIO VOICE SDK — Browser Calling
+   ══════════════════════════════════════════════════════════════════════ */
+
+/** Initialize Twilio Device after login */
+async function initTwilio(){
+  try{
+    // Check if Twilio is configured on backend
+    const cfgRes=await api("GET","/twilio/config-status");
+    if(!cfgRes||!cfgRes.configured){
+      console.log("Twilio not configured — calls disabled");
+      twilioConfigured=false;
+      return;
+    }
+    twilioConfigured=true;
+
+    // Fetch access token
+    const tokenRes=await api("GET","/twilio/token");
+    if(!tokenRes||!tokenRes.token){
+      console.log("Failed to get Twilio token");
+      return;
+    }
+
+    // Initialize Twilio Device (SDK v1.x)
+    twilioDevice=new Twilio.Device(tokenRes.token,{
+      codecPreferences:["opus","pcmu"],
+      closeProtection:true,
+      enableRingingState:true,
+    });
+
+    twilioDevice.on("ready",function(){
+      console.log("✅ Twilio Device ready — listening for calls");
+    });
+
+    twilioDevice.on("error",function(err){
+      console.error("Twilio Device error:",err);
+    });
+
+    // ── INCOMING CALL ──
+    twilioDevice.on("incoming",function(conn){
+      activeConnection=conn;
+      const from=conn.parameters.From||"Unknown";
+
+      // Show call popup
+      showIncomingCall(from,conn.parameters.CallSid);
+
+      conn.on("accept",function(){
+        onCallAccepted(conn);
+      });
+
+      conn.on("reject",function(){
+        onCallEnded("rejected");
+      });
+
+      conn.on("cancel",function(){
+        onCallEnded("canceled");
+      });
+
+      conn.on("disconnect",function(){
+        onCallEnded("completed");
+      });
+    });
+
+    // ── OUTGOING CALL EVENTS ──
+    twilioDevice.on("connect",function(conn){
+      activeConnection=conn;
+      onCallAccepted(conn);
+    });
+
+    twilioDevice.on("disconnect",function(){
+      onCallEnded("completed");
+    });
+
+    // Auto-refresh token before expiry (every 50 min)
+    setInterval(async()=>{
+      try{
+        const r=await api("GET","/twilio/token");
+        if(r&&r.token)twilioDevice.updateToken(r.token);
+      }catch(e){}
+    },50*60*1000);
+
+  }catch(err){
+    console.error("Twilio init error:",err);
+  }
+}
+
+/** Show incoming call popup */
+function showIncomingCall(fromNumber,callSid){
+  const popup=document.getElementById("call-popup");
+  document.getElementById("caller-name").textContent=formatPhoneDisplay(fromNumber);
+  document.getElementById("caller-number").textContent=fromNumber;
+  document.getElementById("call-popup-status").textContent="Incoming Call…";
+  document.getElementById("call-timer").textContent="Ringing…";
+  document.getElementById("call-icon").className="call-icon incoming";
+  document.getElementById("btn-accept").style.display="";
+  document.getElementById("btn-mute").style.display="none";
+  popup.className="ringing";
+  popup.style.display="block";
+
+  // Try to play ringtone
+  try{document.getElementById("ringtone").play().catch(()=>{});}catch(e){}
+}
+
+/** Accept incoming call */
+function acceptCall(){
+  if(activeConnection){
+    activeConnection.accept();
+    // Notify backend
+    const sid=activeConnection.parameters?.CallSid;
+    if(sid)api("PUT","/twilio/calls/"+sid+"/answer").catch(()=>{});
+  }
+}
+
+/** Reject / hang up call */
+function rejectCall(){
+  try{document.getElementById("ringtone").pause();document.getElementById("ringtone").currentTime=0;}catch(e){}
+  if(activeConnection){
+    if(activeConnection.status()==="pending"){
+      activeConnection.reject();
+    }else{
+      activeConnection.disconnect();
+    }
+  }
+  onCallEnded("rejected");
+}
+
+/** Toggle mute */
+function toggleMute(){
+  if(!activeConnection)return;
+  isMuted=!isMuted;
+  activeConnection.mute(isMuted);
+  const btn=document.getElementById("btn-mute");
+  btn.className=isMuted?"call-btn call-btn-mute active":"call-btn call-btn-mute";
+  btn.title=isMuted?"Unmute":"Mute";
+  btn.textContent=isMuted?"🔊":"🔇";
+}
+
+/** Called when call is accepted/connected */
+function onCallAccepted(conn){
+  try{document.getElementById("ringtone").pause();document.getElementById("ringtone").currentTime=0;}catch(e){}
+  const popup=document.getElementById("call-popup");
+  popup.className="";
+  popup.style.display="block";
+  document.getElementById("call-popup-status").textContent="Connected";
+  document.getElementById("call-icon").className="call-icon active";
+  document.getElementById("btn-accept").style.display="none";
+  document.getElementById("btn-mute").style.display="";
+  isMuted=false;
+
+  // Start timer
+  callStartTime=Date.now();
+  callTimerInterval=setInterval(updateCallTimer,1000);
+
+  // Show indicator in navbar
+  document.getElementById("call-indicator").style.display="flex";
+}
+
+/** Called when call ends */
+function onCallEnded(reason){
+  try{document.getElementById("ringtone").pause();document.getElementById("ringtone").currentTime=0;}catch(e){}
+  activeConnection=null;
+  isMuted=false;
+
+  if(callTimerInterval){clearInterval(callTimerInterval);callTimerInterval=null;}
+
+  document.getElementById("call-popup-status").textContent="Call Ended"+(reason?" — "+reason:"");
+  document.getElementById("call-icon").className="call-icon ended";
+  document.getElementById("btn-accept").style.display="none";
+  document.getElementById("btn-mute").style.display="none";
+  document.getElementById("btn-reject").style.display="none";
+  document.getElementById("call-indicator").style.display="none";
+
+  // Hide popup after 3 seconds
+  setTimeout(()=>{
+    document.getElementById("call-popup").style.display="none";
+    document.getElementById("btn-reject").style.display="";
+    // Refresh calls page if viewing
+    if(_currentPage==="calls")pageCalls(document.getElementById("content"));
+  },3000);
+}
+
+/** Update call timer display */
+function updateCallTimer(){
+  if(!callStartTime)return;
+  const elapsed=Math.floor((Date.now()-callStartTime)/1000);
+  const mins=Math.floor(elapsed/60).toString().padStart(2,"0");
+  const secs=(elapsed%60).toString().padStart(2,"0");
+  const display=mins+":"+secs;
+  document.getElementById("call-timer").textContent=display;
+  document.getElementById("call-indicator-timer").textContent=display;
+}
+
+function showCallPopup(){
+  document.getElementById("call-popup").style.display="block";
+}
+function hideCallPopup(){
+  // Only hide popup if not on active call
+  if(!activeConnection){
+    document.getElementById("call-popup").style.display="none";
+  }
+}
+
+/** Format phone number for display */
+function formatPhoneDisplay(num){
+  if(!num)return"Unknown";
+  const d=num.replace(/[^\d]/g,"");
+  if(d.length===11&&d[0]==="1") return"+1 ("+d.slice(1,4)+") "+d.slice(4,7)+"-"+d.slice(7);
+  if(d.length===10) return"("+d.slice(0,3)+") "+d.slice(3,6)+"-"+d.slice(6);
+  return num;
+}
+
+/** Format duration in seconds to mm:ss or hh:mm:ss */
+function fmtDuration(secs){
+  secs=parseInt(secs)||0;
+  if(secs<3600){
+    return Math.floor(secs/60).toString().padStart(2,"0")+":"+
+           (secs%60).toString().padStart(2,"0");
+  }
+  const h=Math.floor(secs/3600);
+  const m=Math.floor((secs%3600)/60);
+  const s=secs%60;
+  return h+":"+m.toString().padStart(2,"0")+":"+s.toString().padStart(2,"0");
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   CALLS PAGE — Call Log + Stats
+   ══════════════════════════════════════════════════════════════════════ */
+let callsPage=1;
+
+async function pageCalls(el){
+  callsPage=1;
+
+  // Fetch call stats
+  const statsData=await api("GET","/twilio/stats");
+
+  el.innerHTML=`
+    <h2 class="page-title">📞 Calls ${twilioConfigured?'<span style="font-size:12px;color:#22c55e;font-weight:400">● Twilio Connected</span>':'<span style="font-size:12px;color:#ef4444;font-weight:400">● Twilio Not Configured</span>'}</h2>
+    ${statsData?`
+    <div class="stat-grid">
+      <div class="stat-card"><div class="val">${statsData.total||0}</div><div class="lbl">Total Calls</div></div>
+      <div class="stat-card"><div class="val" style="color:#60a5fa">${statsData.inbound||0}</div><div class="lbl">Inbound</div></div>
+      <div class="stat-card"><div class="val" style="color:#a78bfa">${statsData.outbound||0}</div><div class="lbl">Outbound</div></div>
+      <div class="stat-card"><div class="val" style="color:#6ee7b7">${statsData.completed||0}</div><div class="lbl">Completed</div></div>
+      <div class="stat-card"><div class="val" style="color:#ef4444">${statsData.missed||0}</div><div class="lbl">Missed</div></div>
+      <div class="stat-card"><div class="val" style="color:#fbbf24">${fmtDuration(Math.round(statsData.avg_duration||0))}</div><div class="lbl">Avg Duration</div></div>
+    </div>`:''}
+    <div class="section-card" style="padding:12px 16px">
+      <div class="search-row" style="margin-bottom:0">
+        <input type="search" id="call-search" placeholder="Search phone, Call SID, customer…" style="flex:1;min-width:0"/>
+        <select id="call-filter-status" style="min-width:120px">
+          <option value="">All Statuses</option>
+          <option value="ringing">Ringing</option>
+          <option value="in-progress">In Progress</option>
+          <option value="completed">Completed</option>
+          <option value="no-answer">Missed</option>
+          <option value="busy">Busy</option>
+          <option value="canceled">Canceled</option>
+        </select>
+        <select id="call-filter-dir" style="min-width:100px">
+          <option value="">All</option>
+          <option value="inbound">Inbound</option>
+          <option value="outbound">Outbound</option>
+        </select>
+        <button class="btn btn-primary btn-sm" onclick="callsPage=1;filterCalls()">Search</button>
+      </div>
+    </div>
+    <div id="calls-table"></div>
+    <div id="calls-pg" class="pagination"></div>`;
+
+  document.getElementById("call-search").addEventListener("keydown",e=>{if(e.key==="Enter"){callsPage=1;filterCalls();}});
+  document.getElementById("call-filter-status").addEventListener("change",()=>{callsPage=1;filterCalls();});
+  document.getElementById("call-filter-dir").addEventListener("change",()=>{callsPage=1;filterCalls();});
+  filterCalls();
+}
+
+async function filterCalls(silent){
+  const searchEl=document.getElementById("call-search");
+  const statusEl=document.getElementById("call-filter-status");
+  const dirEl=document.getElementById("call-filter-dir");
+  if(!searchEl||!statusEl||!dirEl)return;
+  const search=searchEl.value.trim();
+  const status=statusEl.value;
+  const direction=dirEl.value;
+  const data=await api("GET",`/twilio/calls?search=${encodeURIComponent(search)}&status=${encodeURIComponent(status)}&direction=${encodeURIComponent(direction)}&page=${callsPage}&limit=${PER_PAGE}`);
+  if(!data)return;
+  const wrap=document.getElementById("calls-table");
+  const pg=document.getElementById("calls-pg");
+  if(!wrap||!pg)return;
+  if(!data.rows?.length){wrap.innerHTML='<p style="color:#64748b;padding:16px">No call logs found.</p>';pg.innerHTML='';return;}
+
+  function callStatusBadge(s){
+    const colors={"completed":"#166534","in-progress":"#7c3aed","ringing":"#3b82f6","no-answer":"#ef4444","busy":"#d97706","canceled":"#64748b","failed":"#dc2626"};
+    const c=colors[s]||"#475569";
+    return '<span style="background:'+c+';color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600">'+esc(s||"unknown")+'</span>';
+  }
+
+  wrap.innerHTML=`<div class="tbl-wrap"><table>
+    <thead><tr><th>Direction</th><th>From</th><th>To</th><th>Status</th><th>Duration</th><th>Agent</th><th>Customer</th><th>Recording</th><th>Time</th></tr></thead>
+    <tbody>${data.rows.map(c=>`<tr>
+      <td>${c.direction==="inbound"?'<span style="color:#60a5fa">📥 In</span>':'<span style="color:#a78bfa">📤 Out</span>'}</td>
+      <td style="white-space:nowrap;font-family:monospace;font-size:12px">${esc(c.from_number)}</td>
+      <td style="white-space:nowrap;font-family:monospace;font-size:12px">${esc(c.to_number)}</td>
+      <td>${callStatusBadge(c.call_status)}</td>
+      <td>${c.call_duration?fmtDuration(c.call_duration):'—'}</td>
+      <td>${esc(c.agent_name||'—')}</td>
+      <td>${esc(c.customer_name||'—')}</td>
+      <td>${c.recording_url?'<a href="'+esc(c.recording_url)+'" target="_blank" style="color:#60a5fa;font-size:12px">🎙️ Play</a>':'—'}</td>
+      <td style="white-space:nowrap">${fmtDate(c.started_at)}</td>
+      </tr>`).join("")}</tbody></table></div>`;
+  const tp=Math.ceil(data.total/PER_PAGE);
+  pg.innerHTML=tp>1?`
+    <button class="btn btn-outline btn-sm" ${callsPage<=1?'disabled':''} onclick="callsPage--;filterCalls()">← Prev</button>
+    <span class="pg-info">Page ${callsPage} of ${tp} (${data.total} total)</span>
+    <button class="btn btn-outline btn-sm" ${callsPage>=tp?'disabled':''} onclick="callsPage++;filterCalls()">Next →</button>`
+    :`<span class="pg-info">${data.total} call${data.total!==1?'s':''}</span>`;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════

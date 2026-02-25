@@ -126,6 +126,35 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   KEY idx_audit_time (created_at)
 ) ENGINE=InnoDB;
 
+-- ─── CALL LOGS (Twilio Voice SDK) ────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS call_logs (
+  id             INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  call_sid       VARCHAR(64)  NOT NULL UNIQUE,
+  from_number    VARCHAR(30)  NOT NULL,
+  to_number      VARCHAR(30)  NOT NULL,
+  direction      ENUM('inbound','outbound') NOT NULL DEFAULT 'inbound',
+  call_status    VARCHAR(30)  NOT NULL DEFAULT 'ringing',
+  call_duration  INT UNSIGNED NOT NULL DEFAULT 0,
+  recording_url  TEXT         NULL,
+  recording_sid  VARCHAR(64)  NULL,
+  answered_by    INT UNSIGNED NULL,
+  customer_id    INT UNSIGNED NULL,
+  case_id        INT UNSIGNED NULL,
+  notes          TEXT         NULL,
+  started_at     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  ended_at       DATETIME     NULL,
+  created_at     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (answered_by) REFERENCES users(id)     ON DELETE SET NULL,
+  FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL,
+  FOREIGN KEY (case_id)     REFERENCES cases(id)     ON DELETE SET NULL,
+  KEY idx_call_sid    (call_sid),
+  KEY idx_from        (from_number),
+  KEY idx_status      (call_status),
+  KEY idx_answered_by (answered_by),
+  KEY idx_started     (started_at)
+) ENGINE=InnoDB;
+
 -- ─── DEFAULT ADMIN USER ──────────────────────────────────────────────────────
 -- Password: Admin@1234  (bcrypt hash — change immediately after first login)
 INSERT IGNORE INTO users (name, email, password_hash, role, permissions)
