@@ -48,7 +48,7 @@ const logger = createLogger({
           }),
         ]
       : []),
-  },
+  ],
   // Don't exit on error
   exitOnError: false,
 });
