@@ -15,12 +15,12 @@ async function migrate() {
   try {
     await conn.beginTransaction();
 
-    /* ── 1. Expand role ENUM ── */
-    console.log("1. Altering users.role ENUM …");
+    /* ── 1. Add new roles to ENUM while keeping old ones ── */
+    console.log("1. Expanding ENUM to include all old + new roles …");
     await conn.query(`
       ALTER TABLE users
-      MODIFY COLUMN role ENUM('super_admin','admin','super_user','simple_user')
-      NOT NULL DEFAULT 'simple_user'
+      MODIFY COLUMN role ENUM('super_admin','admin','super_user','simple_user','agent')
+      NOT NULL DEFAULT 'admin'
     `);
 
     /* ── 2. Convert old 'agent' rows to 'super_user' ── */
@@ -30,12 +30,20 @@ async function migrate() {
     `);
     console.log(`   ${result.affectedRows} row(s) updated.`);
 
-    /* ── 3. Promote the super-admin email if it's currently 'admin' ── */
+    /* ── 3. Promote the super-admin email ── */
     const superEmail = process.env.SUPER_ADMIN_EMAIL || "support@techsupport4.com";
     console.log(`3. Promoting ${superEmail} to super_admin …`);
     await conn.query(`
       UPDATE users SET role = 'super_admin' WHERE email = ?
     `, [superEmail]);
+
+    /* ── 3b. Now remove old 'agent' from ENUM (all rows already migrated) ── */
+    console.log("3b. Finalizing ENUM — removing old 'agent' value …");
+    await conn.query(`
+      ALTER TABLE users
+      MODIFY COLUMN role ENUM('super_admin','admin','super_user','simple_user')
+      NOT NULL DEFAULT 'simple_user'
+    `);
 
     /* ── 4. Set default permissions for each role ── */
     console.log("4. Setting default permissions per role …");
