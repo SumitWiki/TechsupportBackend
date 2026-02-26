@@ -1,5 +1,7 @@
 const Case = require("../models/Case");
 const AuditLog = require("../models/AuditLog");
+const Notification = require("../models/Notification");
+const User = require("../models/User");
 const { sendMail } = require("../config/mailer");
 
 /** HTML-escape to prevent XSS in emails */
@@ -52,6 +54,44 @@ exports.createFromContact = async (req, res) => {
     console.log(`✅ [createFromContact] Case created in DB: ${caseId} (ID: ${id})`);
 
     // No email sending for contact form submissions
+    // Send email notification to all admin/super_admin users about new ticket
+    try {
+      const allUsers = await User.findAll();
+      const admins = allUsers.filter(u => u.is_active && (u.role === "admin" || u.role === "super_admin"));
+      const adminEmails = admins.map(u => u.email).filter(Boolean);
+      const adminIds = admins.map(u => u.id);
+      
+      if (adminEmails.length > 0) {
+        await sendMail({
+          to: adminEmails.join(","),
+          subject: `New Support Ticket: ${caseId}`,
+          html: `
+            <h2>New Support Ticket Received</h2>
+            <p><strong>Case ID:</strong> ${esc(caseId)}</p>
+            <p><strong>Name:</strong> ${esc(name)}</p>
+            <p><strong>Email:</strong> ${esc(email)}</p>
+            <p><strong>Phone:</strong> ${esc(phone)}</p>
+            <p><strong>Subject:</strong> ${esc(subject || "General Enquiry")}</p>
+            <p><strong>Message:</strong> ${esc(message)}</p>
+            <hr>
+            <p>Log in to the CRM to manage this ticket.</p>
+          `,
+        });
+      }
+      // Create in-app notification for all admin/super_admin users
+      if (adminIds.length > 0) {
+        await Notification.broadcast({
+          user_ids: adminIds,
+          type: "new_ticket",
+          title: `New ticket from ${name}`,
+          message: `${caseId} — ${subject || "General Enquiry"}`,
+          link: `/admin/dashboard?ticket=${caseId}`,
+        });
+      }
+    } catch (notifErr) {
+      console.error("[createFromContact] Notification error (non-fatal):", notifErr.message);
+    }
+
     return res.status(201).json({ ok: true, caseId, id });
   } catch (err) {
     console.error("createFromContact:", err);
@@ -61,8 +101,21 @@ exports.createFromContact = async (req, res) => {
 
 exports.listCases = async (req, res) => {
   try {
-    const { status, search, page, limit } = req.query;
-    const data = await Case.listAll({ status, search, page: parseInt(page) || 1, limit: parseInt(limit) || 50 });
+    const { status, search, page, limit, assigned_to, date_from, date_to } = req.query;
+    
+    // Simple users can only see their own assigned cases
+    let effectiveAssignedTo = assigned_to ? parseInt(assigned_to) : undefined;
+    if (req.user?.role === "simple_user") {
+      effectiveAssignedTo = req.user.id;
+    }
+    
+    const data = await Case.listAll({
+      status, search,
+      page: parseInt(page) || 1,
+      limit: parseInt(limit) || 50,
+      assigned_to: effectiveAssignedTo,
+      date_from, date_to,
+    });
     res.json(data);
   } catch (err) {
     console.error(err);

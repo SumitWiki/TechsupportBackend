@@ -3,7 +3,7 @@ const crypto   = require("crypto");
 const User     = require("../models/User");
 const LoginLog = require("../models/LoginLog");
 const { sendMail } = require("../config/mailer");
-const { isSuperAdmin, SUPER_ADMIN_EMAIL } = require("../middleware/role.middleware");
+const { isSuperAdmin, SUPER_ADMIN_EMAIL, VALID_ROLES, ROLE_LEVEL, roleLevel } = require("../middleware/role.middleware");
 
 exports.listUsers = async (_req, res) => {
   try {
@@ -36,7 +36,11 @@ exports.createUser = async (req, res) => {
     if (existing) return res.status(409).json({ error: "Email already exists" });
 
     // Only super admin can create super_admin or admin roles
-    let finalRole = role || "agent";
+    let finalRole = role || "simple_user";
+    if (!VALID_ROLES.includes(finalRole)) {
+      return res.status(400).json({ error: `Invalid role. Must be one of: ${VALID_ROLES.join(", ")}` });
+    }
+    // Role hierarchy enforcement: cannot create roles at or above your own level (unless super_admin)
     if (finalRole === "super_admin" && !isSuperAdmin(req.user)) {
       return res.status(403).json({ error: "Only Super Admin can create Super Admins" });
     }
@@ -44,12 +48,14 @@ exports.createUser = async (req, res) => {
       return res.status(403).json({ error: "Only Admin or Super Admin can create Admins" });
     }
 
-    // Build permissions — super_admin and admin get all, agents get what's specified
-    const defaultPerms = { read: true, write: false, modify: false, delete: false };
-    const fullPerms = { read: true, write: true, modify: true, delete: true };
-    const finalPerms = (finalRole === 'admin' || finalRole === 'super_admin')
-      ? fullPerms
-      : { ...defaultPerms, ...(permissions || {}) };
+    // Default permission matrix per role
+    const ROLE_DEFAULTS = {
+      super_admin: { read: true, write: true, modify: true, delete: true },
+      admin:       { read: true, write: true, modify: true, delete: false },
+      super_user:  { read: true, write: true, modify: true, delete: false },
+      simple_user: { read: true, write: false, modify: false, delete: false },
+    };
+    const finalPerms = ROLE_DEFAULTS[finalRole] || ROLE_DEFAULTS.simple_user;
 
     const password_hash = await bcrypt.hash(password, 12);
     const id = await User.create({

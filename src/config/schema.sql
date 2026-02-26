@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS users (
   name          VARCHAR(100)  NOT NULL,
   email         VARCHAR(150)  NOT NULL UNIQUE,
   password_hash VARCHAR(255)  NOT NULL,
-  role          ENUM('admin','agent') NOT NULL DEFAULT 'agent',
+  role          ENUM('super_admin','admin','super_user','simple_user') NOT NULL DEFAULT 'simple_user',
   permissions   JSON          NOT NULL DEFAULT (JSON_OBJECT('read',true,'write',false,'modify',false,'delete',false)),
   is_active     TINYINT(1)    NOT NULL DEFAULT 1,
   otp_secret    VARCHAR(100)  NULL,               -- TOTP secret (optional Google Auth)
@@ -155,6 +155,20 @@ CREATE TABLE IF NOT EXISTS call_logs (
   KEY idx_started     (started_at)
 ) ENGINE=InnoDB;
 
+-- ─── NOTIFICATIONS ────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS notifications (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  user_id     INT UNSIGNED   NULL COMMENT 'NULL = broadcast to all',
+  type        VARCHAR(50)    NOT NULL DEFAULT 'info',
+  title       VARCHAR(255)   NOT NULL,
+  message     TEXT           NULL,
+  link        VARCHAR(500)   NULL,
+  is_read     TINYINT(1)     NOT NULL DEFAULT 0,
+  created_at  TIMESTAMP      DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_user_read (user_id, is_read),
+  INDEX idx_created   (created_at)
+) ENGINE=InnoDB;
+
 -- ─── DEFAULT ADMIN USER ──────────────────────────────────────────────────────
 -- Password: Admin@1234  (bcrypt hash — change immediately after first login)
 INSERT IGNORE INTO users (name, email, password_hash, role, permissions)
@@ -162,6 +176,6 @@ VALUES (
   'Super Admin',
   'support@techsupport4.com',
   '$2a$12$b2ksHikEOTd009WWy0yM0.AurlmG753BmakQlU7gHrIm6nFE0jOIW',
-  'admin',
+  'super_admin',
   JSON_OBJECT('read',true,'write',true,'modify',true,'delete',true)
 );

@@ -2,7 +2,7 @@ const router       = require("express").Router();
 const ctrl         = require("../controllers/case.controller");
 const authMw       = require("../middleware/auth.middleware");
 const requireAdmin = require("../middleware/role.middleware");
-const { requirePerm, requireSuperAdmin } = require("../middleware/role.middleware");
+const { requirePerm, requireSuperAdmin, requireSuperUser } = require("../middleware/role.middleware");
 
 // Public — contact form submits here
 router.post("/contact", ctrl.createFromContact);
@@ -31,7 +31,7 @@ router.put  ("/:caseId/close",         requirePerm('modify'), ctrl.closeCase);
 router.put  ("/:caseId/reopen",        requirePerm('modify'), ctrl.reopenCase);
 router.put  ("/:caseId/in-progress",   requirePerm('modify'), ctrl.markInProgress); // mark in progress
 router.put  ("/:caseId/priority",      requirePerm('modify'), ctrl.updatePriority); // change priority
-router.put  ("/:caseId/assign",        requireAdmin,          ctrl.assignCase);     // admin only
+router.put  ("/:caseId/assign",        requireSuperUser,      ctrl.assignCase);     // super_user+ can assign
 router.post ("/:caseId/notes",         requirePerm('write'),  ctrl.addNote);
 router.delete("/:caseId",              requireSuperAdmin,     ctrl.deleteCase);     // super admin only
 

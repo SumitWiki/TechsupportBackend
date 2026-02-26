@@ -51,11 +51,14 @@ const Case = {
     );
     return rows[0] || null;
   },
-  async listAll({ status, search, page = 1, limit = 50 }) {
+  async listAll({ status, search, page = 1, limit = 50, assigned_to, date_from, date_to }) {
     const offset = (page - 1) * limit;
     const conditions = [];
     const params = [];
     if (status) { conditions.push("c.status = ?"); params.push(status); }
+    if (assigned_to) { conditions.push("c.assigned_to = ?"); params.push(assigned_to); }
+    if (date_from) { conditions.push("c.created_at >= ?"); params.push(date_from); }
+    if (date_to) { conditions.push("c.created_at <= ?"); params.push(date_to + " 23:59:59"); }
     if (search) {
       conditions.push("(c.case_id LIKE ? OR c.email LIKE ? OR c.name LIKE ? OR c.phone LIKE ?)");
       const s = `%${search}%`;
@@ -110,10 +113,15 @@ const Case = {
          SUM(priority='urgent')    as urgent,
          SUM(priority='high')      as high,
          SUM(priority='medium')    as medium,
-         SUM(priority='low')       as low
+         SUM(priority='low')       as low,
+         SUM(DATE(created_at) = CURDATE()) as today
        FROM cases`
     );
-    return rows[0];
+    // Also get active users count
+    const [[{ active_users }]] = await db.query(
+      `SELECT COUNT(*) as active_users FROM users WHERE is_active = 1`
+    );
+    return { ...rows[0], active_users };
   },
   async delete(id) {
     await db.query("DELETE FROM cases WHERE id = ?", [id]);

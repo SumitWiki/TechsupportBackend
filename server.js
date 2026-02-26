@@ -66,11 +66,12 @@ app.use("/api/cases/contact", rateLimit({
 }));
 
 // ─── API ROUTES ───────────────────────────────────────────────────────────────
-app.use("/api/auth",      require("./src/routes/auth.routes"));
-app.use("/api/cases",     require("./src/routes/case.routes"));
-app.use("/api/customers", require("./src/routes/customer.routes"));
-app.use("/api/users",     require("./src/routes/user.routes"));
-app.use("/api/twilio",    require("./src/routes/twilio.routes"));
+app.use("/api/auth",          require("./src/routes/auth.routes"));
+app.use("/api/cases",         require("./src/routes/case.routes"));
+app.use("/api/customers",     require("./src/routes/customer.routes"));
+app.use("/api/users",         require("./src/routes/user.routes"));
+app.use("/api/twilio",        require("./src/routes/twilio.routes"));
+app.use("/api/notifications", require("./src/routes/notification.routes"));
 
 // ─── HEALTH CHECK ────────────────────────────────────────────────────────────
 app.get("/api/health", (_req, res) => res.json({ status: "ok", time: new Date() }));
