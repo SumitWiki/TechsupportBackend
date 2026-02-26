@@ -1,18 +1,22 @@
-const bcrypt    = require("bcryptjs");
-const jwt       = require("jsonwebtoken");
-const crypto    = require("crypto");
-const geoip     = require("geoip-lite");
+const bcrypt = require("bcryptjs");
+const jwt    = require("jsonwebtoken");
+const crypto = require("crypto");
+const geoip  = require("geoip-lite");
 
-const User     = require("../models/User");
-const OtpCode  = require("../models/OtpCode");
-const LoginLog = require("../models/LoginLog");
+const User         = require("../models/User");
+const OtpCode      = require("../models/OtpCode");
+const LoginLog     = require("../models/LoginLog");
+const RefreshToken = require("../models/RefreshToken");
 const { sendMail } = require("../config/mailer");
+const logger       = require("../config/logger");
+const db           = require("../config/db");
 
 // ─── In-memory token blacklist (use Redis in multi-instance production) ──────
 if (!global._tokenBlacklist) {
   global._tokenBlacklist = new Set();
 }
 
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 function getIp(req) {
   return (
     req.headers["x-forwarded-for"]?.split(",")[0].trim() ||
@@ -29,14 +33,12 @@ function getGeo(ip) {
     : { country: "Unknown", region: "", city: "" };
 }
 
-/** Cryptographically secure OTP */
 function generateOtp(length = 6) {
   const max = Math.pow(10, length);
   const min = Math.pow(10, length - 1);
   return String(crypto.randomInt(min, max));
 }
 
-/** HTML-escape to prevent XSS in emails */
 function esc(str) {
   if (!str) return "";
   return String(str)
@@ -47,20 +49,75 @@ function esc(str) {
     .replace(/'/g, "&#39;");
 }
 
-// ── STEP 1: email + password ──────────────────────────────────────────────────
+/** Parse JWT expiresIn string (e.g. "15m", "8h", "1d") to milliseconds */
+function parseMaxAge(expiresIn) {
+  const match = String(expiresIn).match(/^(\d+)([smhd])$/);
+  if (!match) return 15 * 60 * 1000; // default 15m
+  const val = parseInt(match[1]);
+  const unit = match[2];
+  if (unit === "s") return val * 1000;
+  if (unit === "m") return val * 60 * 1000;
+  if (unit === "h") return val * 60 * 60 * 1000;
+  if (unit === "d") return val * 24 * 60 * 60 * 1000;
+  return 15 * 60 * 1000;
+}
+
+/** Cookie defaults — secure in production */
+function cookieOpts(maxAgeMs, path = "/") {
+  return {
+    httpOnly:  true,
+    secure:    process.env.NODE_ENV === "production",
+    sameSite:  "Strict",
+    maxAge:    maxAgeMs,
+    path,
+  };
+}
+
+/** Log a security event to the security_logs table */
+async function logSecurityEvent(eventType, req, extra = {}) {
+  try {
+    const ip = getIp(req);
+    await db.query(
+      `INSERT INTO security_logs (event_type, ip_address, user_agent, user_id, email, details)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        eventType,
+        ip,
+        (req.headers["user-agent"] || "").slice(0, 500),
+        extra.userId || null,
+        extra.email || null,
+        JSON.stringify(extra.details || {}),
+      ]
+    );
+  } catch (err) {
+    logger.error("Failed to write security log", { eventType, error: err.message });
+  }
+}
+
+const SUPER_ADMIN_EMAIL = "support@techsupport4.com";
+function checkIsSuperAdmin(user) {
+  return user?.role === "super_admin" || user?.email?.toLowerCase() === SUPER_ADMIN_EMAIL;
+}
+
+// ── STEP 1: email + password → OTP ──────────────────────────────────────────
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
     if (!email || !password) return res.status(400).json({ error: "Email and password required" });
 
     const user = await User.findByEmail(email.toLowerCase().trim());
-    if (!user || !user.is_active) return res.status(401).json({ error: "Invalid credentials" });
+    if (!user || !user.is_active) {
+      await logSecurityEvent("login_failed", req, { email, details: { reason: "invalid_credentials" } });
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
 
     const match = await bcrypt.compare(password, user.password_hash);
     if (!match) {
       const ip  = getIp(req);
       const geo = getGeo(ip);
       await LoginLog.record({ userId: user.id, ip, userAgent: req.headers["user-agent"], geo, status: "failed" });
+      await logSecurityEvent("login_failed", req, { userId: user.id, email: user.email, details: { reason: "wrong_password" } });
+      logger.security("Failed login attempt", { email: user.email, ip });
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
@@ -73,7 +130,6 @@ exports.login = async (req, res) => {
 
     await OtpCode.create(user.id, otp, expiresAt);
 
-    // Send OTP email — wrapped in try/catch so login still works if SMTP is down
     try {
       await sendMail({
         to: user.email,
@@ -91,20 +147,17 @@ exports.login = async (req, res) => {
         `,
       });
     } catch (mailErr) {
-      console.error("⚠️  OTP email failed (SMTP error):", mailErr.message);
-      // Don't block login — OTP is saved in DB, admin can check logs
-      // In production: fix SMTP_USER / SMTP_PASS in .env
+      logger.error("OTP email failed (SMTP error)", { error: mailErr.message, userId: user.id });
     }
 
-    // Don't expose user ID — use a temporary session reference
     return res.json({ message: "OTP sent to your email", userId: user.id });
   } catch (err) {
-    console.error("login error:", err);
+    logger.error("login error", { error: err.message, stack: err.stack });
     res.status(500).json({ error: "Server error" });
   }
 };
 
-// ── STEP 2: verify OTP ────────────────────────────────────────────────────────
+// ── STEP 2: verify OTP → issue access + refresh tokens ─────────────────────
 exports.verifyOtp = async (req, res) => {
   try {
     const { userId, otp } = req.body;
@@ -112,25 +165,23 @@ exports.verifyOtp = async (req, res) => {
 
     const user = await User.findById(userId);
     if (!user) return res.status(400).json({ error: "User not found" });
-
-    // Re-check is_active (user could be disabled between step 1 and step 2)
     if (!user.is_active) return res.status(401).json({ error: "Account is disabled" });
 
     const valid = await OtpCode.verify(userId, otp.trim());
-    if (!valid) return res.status(401).json({ error: "Invalid or expired OTP" });
+    if (!valid) {
+      await logSecurityEvent("otp_failed", req, { userId: user.id, email: user.email });
+      return res.status(401).json({ error: "Invalid or expired OTP" });
+    }
 
-    // Record successful login with IP + geo
+    // Record successful login
     const ip  = getIp(req);
     const geo = getGeo(ip);
     await LoginLog.record({
-      userId: user.id,
-      ip,
-      userAgent: req.headers["user-agent"],
-      geo,
-      status: "success",
+      userId: user.id, ip, userAgent: req.headers["user-agent"], geo, status: "success",
     });
+    await logSecurityEvent("login_success", req, { userId: user.id, email: user.email });
 
-    // Send login notification email — wrapped in try/catch so verification succeeds even if SMTP fails
+    // Login notification email
     try {
       const now = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
       await sendMail({
@@ -151,90 +202,162 @@ exports.verifyOtp = async (req, res) => {
         `,
       });
     } catch (mailErr) {
-      console.error("⚠️  Login notification email failed (SMTP error):", mailErr.message);
-      // Don't block login — user is already verified
+      logger.error("Login notification email failed", { error: mailErr.message, userId: user.id });
     }
 
-    // Issue JWT — NO fallback secret, env must be set
-    const expiresIn = process.env.JWT_EXPIRES_IN || "8h";
-    const token = jwt.sign(
+    // ── Short-lived access token (15 min default) ────────────────────────
+    const accessExpiry = process.env.ACCESS_TOKEN_EXPIRY || "15m";
+    const accessToken = jwt.sign(
       { id: user.id, email: user.email, role: user.role, name: user.name },
       process.env.JWT_SECRET,
-      { expiresIn }
+      { expiresIn: accessExpiry }
     );
 
-    // ── Set JWT as HttpOnly cookie (NOT in response body) ──────────────────
-    const maxAgeMs = parseMaxAge(expiresIn);
-    res.cookie("auth_token", token, {
-      httpOnly:  true,
-      secure:    process.env.NODE_ENV === "production",
-      sameSite:  "Strict",
-      maxAge:    maxAgeMs,
-      path:      "/",
-    });
+    // ── Long-lived refresh token (7 days default, stored hashed in DB) ──
+    const { token: refreshToken, family } = await RefreshToken.create(user.id);
+
+    const refreshDays = parseInt(process.env.REFRESH_TOKEN_DAYS) || 7;
+    const refreshMaxAge = refreshDays * 24 * 60 * 60 * 1000;
+
+    // Set both cookies
+    res.cookie("auth_token", accessToken, cookieOpts(parseMaxAge(accessExpiry)));
+    res.cookie("refresh_token", refreshToken, cookieOpts(refreshMaxAge, "/api/auth"));
 
     return res.json({
       user: { id: user.id, name: user.name, email: user.email, role: user.role },
     });
   } catch (err) {
-    console.error("verifyOtp error:", err);
+    logger.error("verifyOtp error", { error: err.message, stack: err.stack });
     res.status(500).json({ error: "Server error" });
   }
 };
 
-// ── Logout (blacklist token + clear cookie) ──────────────────────────────────
-exports.logout = (req, res) => {
-  if (req.token) {
-    global._tokenBlacklist.add(req.token);
-    const expiresMs = (req.user?.exp ? req.user.exp * 1000 - Date.now() : 8 * 60 * 60 * 1000);
-    setTimeout(() => global._tokenBlacklist.delete(req.token), Math.max(expiresMs, 0));
+// ── Refresh: rotate refresh token, issue new access token ───────────────────
+exports.refresh = async (req, res) => {
+  try {
+    const oldRefreshToken = req.cookies?.refresh_token;
+    if (!oldRefreshToken) return res.status(401).json({ error: "No refresh token" });
+
+    // Try to rotate (revokes old, issues new in same family)
+    const result = await RefreshToken.rotate(oldRefreshToken);
+
+    if (!result) {
+      // Token not found or already revoked — possible theft!
+      // Try to find the revoked record to get the family for full revocation
+      const tokenHash = crypto.createHash("sha256").update(oldRefreshToken).digest("hex");
+      const [rows] = await db.query(
+        `SELECT family, user_id FROM refresh_tokens WHERE token_hash = ? LIMIT 1`,
+        [tokenHash]
+      );
+      if (rows[0]) {
+        // Revoke ENTIRE family — attacker AND legitimate user lose access
+        await RefreshToken.revokeFamily(rows[0].family);
+        await logSecurityEvent("refresh_token_reuse", req, {
+          userId: rows[0].user_id,
+          details: { family: rows[0].family, action: "family_revoked" },
+        });
+        logger.security("Refresh token reuse detected — family revoked", {
+          userId: rows[0].user_id,
+          family: rows[0].family,
+        });
+      }
+
+      res.clearCookie("auth_token",    cookieOpts(0));
+      res.clearCookie("refresh_token", cookieOpts(0, "/api/auth"));
+      return res.status(401).json({ error: "Invalid refresh token — please login again" });
+    }
+
+    // Fetch fresh user from DB (never trust old token claims)
+    const user = await User.findById(result.userId);
+    if (!user || !user.is_active) {
+      await RefreshToken.revokeFamily(result.family);
+      res.clearCookie("auth_token",    cookieOpts(0));
+      res.clearCookie("refresh_token", cookieOpts(0, "/api/auth"));
+      return res.status(401).json({ error: "Account disabled" });
+    }
+
+    // Issue new access token with fresh user data
+    const accessExpiry = process.env.ACCESS_TOKEN_EXPIRY || "15m";
+    const accessToken = jwt.sign(
+      { id: user.id, email: user.email, role: user.role, name: user.name },
+      process.env.JWT_SECRET,
+      { expiresIn: accessExpiry }
+    );
+
+    const refreshDays = parseInt(process.env.REFRESH_TOKEN_DAYS) || 7;
+    const refreshMaxAge = refreshDays * 24 * 60 * 60 * 1000;
+
+    res.cookie("auth_token", accessToken, cookieOpts(parseMaxAge(accessExpiry)));
+    res.cookie("refresh_token", result.token, cookieOpts(refreshMaxAge, "/api/auth"));
+
+    return res.json({ message: "Token refreshed" });
+  } catch (err) {
+    logger.error("refresh error", { error: err.message, stack: err.stack });
+    res.status(500).json({ error: "Server error" });
   }
-
-  // Clear the HttpOnly auth cookie
-  res.clearCookie("auth_token", {
-    httpOnly:  true,
-    secure:    process.env.NODE_ENV === "production",
-    sameSite:  "Strict",
-    path:      "/",
-  });
-
-  res.json({ message: "Logged out successfully" });
 };
 
-/** Parse JWT expiresIn string (e.g. "8h", "1d", "30m") to milliseconds */
-function parseMaxAge(expiresIn) {
-  const match = String(expiresIn).match(/^(\d+)([smhd])$/);
-  if (!match) return 8 * 60 * 60 * 1000; // default 8h
-  const val = parseInt(match[1]);
-  const unit = match[2];
-  if (unit === "s") return val * 1000;
-  if (unit === "m") return val * 60 * 1000;
-  if (unit === "h") return val * 60 * 60 * 1000;
-  if (unit === "d") return val * 24 * 60 * 60 * 1000;
-  return 8 * 60 * 60 * 1000;
-}
+// ── Logout (blacklist access token + revoke refresh family + clear cookies) ──
+exports.logout = async (req, res) => {
+  try {
+    // Blacklist the access token
+    if (req.token) {
+      global._tokenBlacklist.add(req.token);
+      const expiresMs = req.user?.exp ? req.user.exp * 1000 - Date.now() : 15 * 60 * 1000;
+      setTimeout(() => global._tokenBlacklist.delete(req.token), Math.max(expiresMs, 0));
+    }
 
-// Super admin email check
-const SUPER_ADMIN_EMAIL = "support@techsupport4.com";
-function checkIsSuperAdmin(user) {
-  return user?.role === "super_admin" || user?.email?.toLowerCase() === SUPER_ADMIN_EMAIL;
-}
+    // Revoke refresh token family
+    const refreshToken = req.cookies?.refresh_token;
+    if (refreshToken) {
+      const tokenHash = crypto.createHash("sha256").update(refreshToken).digest("hex");
+      const [rows] = await db.query(
+        `SELECT family FROM refresh_tokens WHERE token_hash = ? LIMIT 1`,
+        [tokenHash]
+      );
+      if (rows[0]) {
+        await RefreshToken.revokeFamily(rows[0].family);
+      }
+    }
 
-// ── Whoami ────────────────────────────────────────────────────────────────────
+    await logSecurityEvent("logout", req, { userId: req.user?.id, email: req.user?.email });
+
+    // Clear both cookies
+    res.clearCookie("auth_token",    cookieOpts(0));
+    res.clearCookie("refresh_token", cookieOpts(0, "/api/auth"));
+
+    res.json({ message: "Logged out successfully" });
+  } catch (err) {
+    logger.error("logout error", { error: err.message });
+    // Still clear cookies even on error
+    res.clearCookie("auth_token",    cookieOpts(0));
+    res.clearCookie("refresh_token", cookieOpts(0, "/api/auth"));
+    res.json({ message: "Logged out" });
+  }
+};
+
+// ── Whoami (always fetches fresh from DB) ────────────────────────────────────
 exports.me = async (req, res) => {
-  const user = await User.findById(req.user.id);
-  if (!user) return res.status(401).json({ error: "User not found" });
-  
-  const isSuperAdmin = checkIsSuperAdmin(user);
-  const effectiveRole = isSuperAdmin ? "super_admin" : user.role;
-  const fullPerms = { read: true, write: true, modify: true, delete: true };
-  
-  res.json({
-    id: user.id,
-    name: user.name,
-    email: user.email,
-    role: effectiveRole,
-    isSuperAdmin: isSuperAdmin,
-    permissions: isSuperAdmin || user.role === "admin" ? fullPerms : (user.permissions || { read: true, write: false, modify: false, delete: false }),
-  });
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(401).json({ error: "User not found" });
+
+    const isSuperAdmin = checkIsSuperAdmin(user);
+    const effectiveRole = isSuperAdmin ? "super_admin" : user.role;
+    const fullPerms = { read: true, write: true, modify: true, delete: true };
+
+    res.json({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: effectiveRole,
+      isSuperAdmin,
+      permissions: isSuperAdmin || user.role === "admin"
+        ? fullPerms
+        : (user.permissions || { read: true, write: false, modify: false, delete: false }),
+    });
+  } catch (err) {
+    logger.error("me error", { error: err.message });
+    res.status(500).json({ error: "Server error" });
+  }
 };
