@@ -20,7 +20,13 @@ function authMiddleware(req, res, next) {
   const headerToken = header.startsWith("Bearer ") ? header.slice(7) : null;
   const token       = cookieToken || headerToken;
 
-  if (!token) return res.status(401).json({ error: "No token provided" });
+  if (!token) {
+    // No access token — if refresh cookie exists, tell frontend to refresh
+    if (req.cookies?.refresh_token) {
+      return res.status(401).json({ error: "Token expired", code: "TOKEN_EXPIRED" });
+    }
+    return res.status(401).json({ error: "No token provided" });
+  }
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
