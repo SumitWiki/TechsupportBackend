@@ -275,6 +275,47 @@ exports.markOpen = async (req, res) => {
   }
 };
 
+// Bulk delete cases (Super Admin only)
+exports.bulkDeleteCases = async (req, res) => {
+  try {
+    const { caseIds } = req.body;
+    if (!Array.isArray(caseIds) || caseIds.length === 0) {
+      return res.status(400).json({ error: "caseIds array is required" });
+    }
+    if (caseIds.length > 200) {
+      return res.status(400).json({ error: "Cannot delete more than 200 cases at once" });
+    }
+
+    // Look up all cases by case_id strings
+    const foundCases = [];
+    for (const cid of caseIds) {
+      const c = await Case.findByCaseId(cid);
+      if (c) foundCases.push(c);
+    }
+    if (foundCases.length === 0) {
+      return res.status(404).json({ error: "No matching cases found" });
+    }
+
+    // Audit log each deletion
+    for (const c of foundCases) {
+      await AuditLog.record({
+        caseId: c.id,
+        userId: req.user.id,
+        action: "deleted",
+        oldStatus: c.status,
+        newStatus: "deleted",
+        note: `Case ${c.case_id} bulk-deleted by ${req.user.name}`,
+      });
+    }
+
+    const deleted = await Case.deleteMany(foundCases.map((c) => c.id));
+    res.json({ ok: true, message: `${deleted} case(s) deleted successfully`, deleted });
+  } catch (err) {
+    console.error("bulkDeleteCases:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+};
+
 // Delete case (Super Admin only)
 exports.deleteCase = async (req, res) => {
   try {

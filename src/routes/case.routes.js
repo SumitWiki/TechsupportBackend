@@ -25,6 +25,7 @@ router.get  ("/",                      requirePerm('read'),   paginationRules, c
 router.get  ("/stats",                                        ctrl.stats);
 router.get  ("/audit",                 requireAdmin,          ctrl.recentAudit);
 router.post ("/manual",                requirePerm('write'),  ctrl.createManual);
+router.post ("/bulk-delete",           requireSuperAdmin,     ctrl.bulkDeleteCases);
 router.get  ("/:caseId",               caseIdParam, requirePerm('read'),   ctrl.getCase);
 router.get  ("/:caseId/audit",         caseIdParam, requirePerm('read'),   ctrl.getAuditLog);
 router.put  ("/:caseId/open",          caseIdParam, requirePerm('modify'), ctrl.markOpen);

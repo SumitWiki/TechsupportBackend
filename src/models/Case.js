@@ -126,6 +126,12 @@ const Case = {
   async delete(id) {
     await db.query("DELETE FROM cases WHERE id = ?", [id]);
   },
+  async deleteMany(ids) {
+    if (!ids.length) return 0;
+    const placeholders = ids.map(() => "?").join(",");
+    const [result] = await db.query(`DELETE FROM cases WHERE id IN (${placeholders})`, ids);
+    return result.affectedRows;
+  },
 };
 
 module.exports = Case;
