@@ -75,27 +75,72 @@ app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 // ─── GLOBAL RATE LIMITING ─────────────────────────────────────────────────────
 app.use("/api/", rateLimit({
   windowMs: 15 * 60 * 1000,   // 15 minutes
-  max: 100,                    // 100 requests per window per IP
+  max: 500,                    // 500 requests per window per IP (dashboard fires many)
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many requests, please try again later" },
   skip: (req) => req.path === "/api/health",  // Allow health checks
 }));
 
-// ─── TARGETED RATE LIMITS (stricter for auth endpoints) ───────────────────────
-const loginLimiter = rateLimit({
-  windowMs: 10 * 60 * 1000,   // 10 minutes
-  max: 5,                      // 5 attempts per window
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: "Too many login attempts — try again in 10 minutes" },
-});
-app.use("/api/auth/login",      loginLimiter);
-app.use("/api/auth/verify-otp", loginLimiter);
+// ─── FAILED-ONLY LOGIN RATE LIMIT ─────────────────────────────────────────────
+// Only counts FAILED login/OTP attempts. Successful logins reset the counter.
+// Valid users are NEVER blocked — only brute-force attackers.
+const failedLoginStore = new Map(); // ip -> { count, resetTime }
+const FAILED_LOGIN_WINDOW = 10 * 60 * 1000; // 10 minutes
+const FAILED_LOGIN_MAX = 10;                 // 10 failed attempts per window
 
+function failedLoginLimiter(req, res, next) {
+  const ip = req.headers["x-forwarded-for"]?.split(",")[0].trim() || req.socket?.remoteAddress || "unknown";
+  const now = Date.now();
+  const entry = failedLoginStore.get(ip);
+
+  // Clean expired entries
+  if (entry && now > entry.resetTime) {
+    failedLoginStore.delete(ip);
+  }
+
+  const current = failedLoginStore.get(ip);
+  if (current && current.count >= FAILED_LOGIN_MAX) {
+    const retryAfter = Math.ceil((current.resetTime - now) / 1000);
+    res.set("Retry-After", String(retryAfter));
+    return res.status(429).json({ error: "Too many failed attempts — try again in 10 minutes" });
+  }
+
+  // Hook into response to count only failures
+  const originalJson = res.json.bind(res);
+  res.json = function(body) {
+    if (res.statusCode === 401) {
+      // Failed attempt — increment counter
+      const e = failedLoginStore.get(ip);
+      if (e) {
+        e.count++;
+      } else {
+        failedLoginStore.set(ip, { count: 1, resetTime: now + FAILED_LOGIN_WINDOW });
+      }
+    } else if (res.statusCode === 200) {
+      // Successful — RESET counter so valid users are never blocked
+      failedLoginStore.delete(ip);
+    }
+    return originalJson(body);
+  };
+  next();
+}
+
+// Periodic cleanup of expired entries (every 5 min)
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, entry] of failedLoginStore) {
+    if (now > entry.resetTime) failedLoginStore.delete(ip);
+  }
+}, 5 * 60 * 1000);
+
+app.use("/api/auth/login",      failedLoginLimiter);
+app.use("/api/auth/verify-otp", failedLoginLimiter);
+
+// ─── REFRESH TOKEN — generous limit (no strict blocking) ─────────────────────
 app.use("/api/auth/refresh", rateLimit({
-  windowMs: 1 * 60 * 1000,    // 1 minute
-  max: 10,                     // 10 refreshes per minute
+  windowMs: 60 * 60 * 1000,   // 1 hour
+  max: 100,                    // 100 refreshes per hour — normal users won't hit this
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many refresh attempts" },
