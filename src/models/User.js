@@ -46,9 +46,18 @@ const User = {
     await db.query("UPDATE users SET otp_secret = ? WHERE id = ?", [secret, id]);
   },
   async delete(id) {
-    await db.query("DELETE FROM otp_codes WHERE user_id = ?", [id]);
-    await db.query("DELETE FROM login_logs WHERE user_id = ?", [id]);
-    await db.query("UPDATE cases SET assigned_to = NULL WHERE assigned_to = ?", [id]);
+    // Clean up all references to this user before deleting.
+    // Tables with ON DELETE CASCADE (otp_codes, login_logs, otp_attempts,
+    // case_notes, audit_logs, refresh_tokens, email_logs, customer_notes,
+    // delete_approvals.requested_by) are handled automatically by MySQL.
+    // Tables with ON DELETE SET NULL (cases.assigned_to, customers.created_by,
+    // delete_approvals.reviewed_by, call_logs.answered_by) also auto-handle.
+
+    // Clean tables that have no FK constraint or just an INDEX on user_id
+    try { await db.query("DELETE FROM notifications WHERE user_id = ?", [id]); } catch (_) {}
+    try { await db.query("UPDATE security_logs SET user_id = NULL WHERE user_id = ?", [id]); } catch (_) {}
+
+    // Now delete the user row — CASCADE/SET NULL handles the rest
     await db.query("DELETE FROM users WHERE id = ?", [id]);
   },
 };
