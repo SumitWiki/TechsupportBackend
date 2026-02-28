@@ -40,8 +40,14 @@ const Customer = {
     await db.query(`UPDATE customers SET ${set} WHERE id = ?`, [...vals, id]);
   },
   async delete(id) {
-    // Remove customer_id references from cases first
-    await db.query("UPDATE cases SET customer_id = NULL WHERE customer_id = ?", [id]);
+    // Clean up all references before deleting
+    // Tables with ON DELETE CASCADE (email_logs, customer_notes) are auto-handled.
+    // Tables with ON DELETE SET NULL (cases.customer_id, call_logs.customer_id) are auto-handled.
+
+    // Clean pending delete_approvals targeting this customer
+    try { await db.query("DELETE FROM delete_approvals WHERE target_type = 'customer' AND target_id = ?", [id]); } catch (_) {}
+
+    // Now delete — CASCADE/SET NULL handles the rest
     await db.query("DELETE FROM customers WHERE id = ?", [id]);
   },
   async all(limit = 500) {
