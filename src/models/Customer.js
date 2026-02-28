@@ -54,6 +54,17 @@ const Customer = {
     );
     return rows;
   },
+  async byCreator(userId, limit = 500) {
+    const [rows] = await db.query(
+      `SELECT c.*, u.name AS added_by_name, u.email AS added_by_email
+       FROM customers c
+       LEFT JOIN users u ON c.created_by = u.id
+       WHERE c.created_by = ?
+       ORDER BY c.created_at DESC LIMIT ?`,
+      [userId, limit]
+    );
+    return rows;
+  },
 };
 
 module.exports = Customer;
