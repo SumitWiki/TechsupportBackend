@@ -21,6 +21,6 @@ router.delete("/:id",              idParam,               ctrl.deleteUser);
 router.get  ("/logs",              ctrl.getLoginLogs);
 
 // Super admin only
-router.post ("/:id/force-logout",  idParam, requireSuperAdmin, ctrl.forceLogout);
+router.post ("/:id/force-logout",  idParam, requireAdmin, ctrl.forceLogout);
 
 module.exports = router;

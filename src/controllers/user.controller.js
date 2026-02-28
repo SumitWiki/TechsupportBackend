@@ -36,7 +36,7 @@ exports.createUser = async (req, res) => {
     if (existing) return res.status(409).json({ error: "Email already exists" });
 
     // Only super admin can create super_admin or admin roles
-    let finalRole = role || "simple_user";
+    let finalRole = role || "user";
     if (!VALID_ROLES.includes(finalRole)) {
       return res.status(400).json({ error: `Invalid role. Must be one of: ${VALID_ROLES.join(", ")}` });
     }
@@ -52,10 +52,12 @@ exports.createUser = async (req, res) => {
     const ROLE_DEFAULTS = {
       super_admin: { read: true, write: true, modify: true, delete: true },
       admin:       { read: true, write: true, modify: true, delete: false },
-      super_user:  { read: true, write: true, modify: true, delete: false },
-      simple_user: { read: true, write: false, modify: false, delete: false },
+      user:        { read: true, write: false, modify: false, delete: false },
     };
-    const finalPerms = ROLE_DEFAULTS[finalRole] || ROLE_DEFAULTS.simple_user;
+    // If caller provides custom permissions, merge them; otherwise use role defaults
+    const finalPerms = permissions && typeof permissions === 'object'
+      ? { ...ROLE_DEFAULTS[finalRole], ...permissions }
+      : (ROLE_DEFAULTS[finalRole] || ROLE_DEFAULTS.user);
 
     const password_hash = await bcrypt.hash(password, 12);
     const id = await User.create({
@@ -256,7 +258,7 @@ exports.changeUserPassword = async (req, res) => {
   }
 };
 
-// Super admin force logout a user (blacklist all their tokens)
+// Admin+ can force logout a user (with proper permissions)
 exports.forceLogout = async (req, res) => {
   try {
     const targetId = parseInt(req.params.id);
@@ -268,9 +270,14 @@ exports.forceLogout = async (req, res) => {
       return res.status(400).json({ error: "Cannot force logout yourself" });
     }
 
-    // Cannot force logout super admin
-    if (isSuperAdmin(targetUser)) {
+    // Cannot force logout super admin (only another super admin can)
+    if (isSuperAdmin(targetUser) && !isSuperAdmin(req.user)) {
       return res.status(403).json({ error: "Cannot force logout Super Admin" });
+    }
+
+    // Only super admin can force-logout admins
+    if (targetUser.role === "admin" && !isSuperAdmin(req.user)) {
+      return res.status(403).json({ error: "Only Super Admin can force logout Admin accounts" });
     }
 
     // Temporarily deactivate and reactivate to invalidate sessions

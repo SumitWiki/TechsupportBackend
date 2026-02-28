@@ -5,22 +5,26 @@ const SUPER_ADMIN_EMAIL = "support@techsupport4.com";
 
 /**
  * Role hierarchy (higher number = more privilege):
- *   simple_user (1) < super_user (2) < admin (3) < super_admin (4)
+ *   user (1) < admin (2) < super_admin (3)
  *
  * Default permission matrix:
  *   super_admin  → read, write, modify, delete  (FULL)
  *   admin        → read, write, modify          (no delete users)
- *   super_user   → read, write, modify          (assign/close tickets, limited user view)
- *   simple_user  → read                         (own tickets only)
+ *   user         → read                         (own tickets only)
+ *
+ * Permissions are stored per-user JSON and can be customised by super_admin.
  */
 const ROLE_LEVEL = {
-  simple_user: 1,
-  super_user:  2,
-  admin:       3,
-  super_admin: 4,
+  user:        1,
+  admin:       2,
+  super_admin: 3,
 };
 
-const VALID_ROLES = Object.keys(ROLE_LEVEL);
+// Backwards-compat aliases so old DB rows still map correctly
+ROLE_LEVEL.simple_user = 1;
+ROLE_LEVEL.super_user  = 1;
+
+const VALID_ROLES = ["super_admin", "admin", "user"];
 
 /**
  * Check if user is super admin
@@ -57,11 +61,12 @@ function requireSuperAdmin(req, res, next) {
 }
 
 /**
- * requireSuperUser — super_user, admin, or super_admin can proceed
+ * requireSuperUser — admin or super_admin can proceed
+ * (kept for backwards compat — same as requireAdmin now)
  */
 function requireSuperUser(req, res, next) {
-  if (roleLevel(req.user?.role) < ROLE_LEVEL.super_user && !isSuperAdmin(req.user)) {
-    return res.status(403).json({ error: "Super User access or above required" });
+  if (roleLevel(req.user?.role) < ROLE_LEVEL.admin && !isSuperAdmin(req.user)) {
+    return res.status(403).json({ error: "Admin access or above required" });
   }
   next();
 }
