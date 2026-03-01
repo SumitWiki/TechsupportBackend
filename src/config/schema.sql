@@ -59,18 +59,63 @@ CREATE TABLE IF NOT EXISTS login_logs (
 
 -- ─── CUSTOMERS ───────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS customers (
-  id           INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  name         VARCHAR(150) NOT NULL,
-  email        VARCHAR(150) NOT NULL,
-  phone        VARCHAR(20)  NOT NULL,
-  address      TEXT         NULL,
-  plan         VARCHAR(100) NULL,
-  notes        TEXT         NULL,
-  created_by   INT UNSIGNED NULL,
-  created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  id               INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  name             VARCHAR(150) NOT NULL,
+  email            VARCHAR(150) NOT NULL,
+  phone            VARCHAR(20)  NOT NULL,
+  address          TEXT         NULL,
+  plan             VARCHAR(100) NULL,
+  notes            TEXT         NULL,
+  amount           DECIMAL(10,2) NULL DEFAULT NULL,
+  paid_amount      DECIMAL(10,2) NULL DEFAULT NULL,
+  offer            VARCHAR(255)  NULL DEFAULT NULL,
+  validity_months  INT UNSIGNED  NULL DEFAULT NULL COMMENT 'Service validity in months',
+  expiry_date      DATE          NULL DEFAULT NULL COMMENT 'Auto-calculated from validity_months',
+  created_by       INT UNSIGNED NULL,
+  created_at       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   KEY idx_email (email),
   KEY idx_phone (phone)
+) ENGINE=InnoDB;
+
+-- ─── CUSTOMER EDIT AUDIT LOGS ────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS customer_edit_logs (
+  id            INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  customer_id   INT UNSIGNED NOT NULL,
+  edited_by     INT UNSIGNED NOT NULL,
+  action        VARCHAR(50)  NOT NULL DEFAULT 'update',
+  field_name    VARCHAR(100) NULL,
+  old_value     TEXT         NULL,
+  new_value     TEXT         NULL,
+  note          TEXT         NULL,
+  created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE,
+  FOREIGN KEY (edited_by)   REFERENCES users(id)     ON DELETE CASCADE,
+  KEY idx_customer (customer_id),
+  KEY idx_edited_by (edited_by),
+  KEY idx_created (created_at)
+) ENGINE=InnoDB;
+
+-- ─── CUSTOMER MODIFICATION REQUESTS ──────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS customer_modification_requests (
+  id              INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  customer_id     INT UNSIGNED NOT NULL,
+  requested_by    INT UNSIGNED NOT NULL,
+  status          ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending',
+  requested_changes JSON NOT NULL,
+  reason          TEXT         NULL,
+  reviewed_by     INT UNSIGNED NULL,
+  reviewed_at     DATETIME     NULL,
+  review_note     TEXT         NULL,
+  created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (customer_id)  REFERENCES customers(id) ON DELETE CASCADE,
+  FOREIGN KEY (requested_by) REFERENCES users(id)     ON DELETE CASCADE,
+  FOREIGN KEY (reviewed_by)  REFERENCES users(id)     ON DELETE SET NULL,
+  KEY idx_customer (customer_id),
+  KEY idx_status   (status),
+  KEY idx_requested_by (requested_by),
+  KEY idx_created (created_at)
 ) ENGINE=InnoDB;
 
 -- ─── CASES / TICKETS ─────────────────────────────────────────────────────────

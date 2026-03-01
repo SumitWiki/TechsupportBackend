@@ -1,12 +1,22 @@
 const db = require("../config/db");
 
 const Customer = {
-  async create({ name, email, phone, address, plan, notes, amount, paid_amount, offer, created_by }) {
+  /** Calculate expiry date from a base date + validity months */
+  _calcExpiry(baseDate, months) {
+    if (!months || months <= 0) return null;
+    const d = new Date(baseDate);
+    d.setMonth(d.getMonth() + months);
+    return d.toISOString().slice(0, 10); // YYYY-MM-DD
+  },
+
+  async create({ name, email, phone, address, plan, notes, amount, paid_amount, offer, validity_months, created_by }) {
+    const expiry_date = this._calcExpiry(new Date(), validity_months);
     const [result] = await db.query(
-      `INSERT INTO customers (name,email,phone,address,plan,notes,amount,paid_amount,offer,created_by)
-       VALUES (?,?,?,?,?,?,?,?,?,?)`,
+      `INSERT INTO customers (name,email,phone,address,plan,notes,amount,paid_amount,offer,validity_months,expiry_date,created_by)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
       [name, email || "", phone, address || null, plan || null, notes || null,
-       amount || null, paid_amount || null, offer || null, created_by || null]
+       amount || null, paid_amount || null, offer || null,
+       validity_months || null, expiry_date, created_by || null]
     );
     return result.insertId;
   },
@@ -32,7 +42,17 @@ const Customer = {
     return rows[0] || null;
   },
   async update(id, fields) {
-    const allowed = ["name", "email", "phone", "address", "plan", "notes", "amount", "paid_amount", "offer"];
+    const allowed = ["name", "email", "phone", "address", "plan", "notes", "amount", "paid_amount", "offer", "validity_months", "expiry_date"];
+    // Auto-calculate expiry_date when validity_months changes
+    if (fields.validity_months !== undefined) {
+      const months = parseInt(fields.validity_months);
+      if (months && months > 0) {
+        fields.expiry_date = this._calcExpiry(new Date(), months);
+      } else {
+        fields.validity_months = null;
+        fields.expiry_date = null;
+      }
+    }
     const keys = Object.keys(fields).filter((k) => allowed.includes(k));
     if (!keys.length) return;
     const set = keys.map((k) => `${k} = ?`).join(", ");
