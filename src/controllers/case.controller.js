@@ -3,6 +3,18 @@ const AuditLog = require("../models/AuditLog");
 const Notification = require("../models/Notification");
 const User = require("../models/User");
 const { sendMail } = require("../config/mailer");
+const { isSuperAdmin } = require("../middleware/role.middleware");
+
+/** Check if user is admin or super admin */
+function isAdminPlus(user) {
+  return isSuperAdmin(user) || user?.role === "admin";
+}
+
+/** Check if a normal user can access a specific case */
+function canAccessCase(user, caseRow) {
+  if (isAdminPlus(user)) return true;
+  return caseRow.created_by === user.id || caseRow.assigned_to === user.id;
+}
 
 /** HTML-escape to prevent XSS in emails */
 function esc(str) {
@@ -102,19 +114,17 @@ exports.createFromContact = async (req, res) => {
 exports.listCases = async (req, res) => {
   try {
     const { status, search, page, limit, assigned_to, date_from, date_to } = req.query;
-    
-    // Simple users can only see their own assigned cases
-    let effectiveAssignedTo = assigned_to ? parseInt(assigned_to) : undefined;
-    if (req.user?.role === "simple_user") {
-      effectiveAssignedTo = req.user.id;
-    }
-    
+
+    // Normal users: only see tickets they created or are assigned to
+    const visibleToUserId = isAdminPlus(req.user) ? undefined : req.user.id;
+
     const data = await Case.listAll({
       status, search,
       page: parseInt(page) || 1,
       limit: parseInt(limit) || 50,
-      assigned_to: effectiveAssignedTo,
+      assigned_to: assigned_to ? parseInt(assigned_to) : undefined,
       date_from, date_to,
+      visibleToUserId,
     });
     res.json(data);
   } catch (err) {
@@ -131,7 +141,7 @@ exports.createManual = async (req, res) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) return res.status(400).json({ error: "Invalid email" });
     if (phone && !/^[\d\s\-+().]+$/.test(phone)) return res.status(400).json({ error: "Phone must contain only digits" });
-    const { caseId } = await Case.create({ name, email, phone: phone || "N/A", subject: subject || "Manual Ticket", message, source: "crm_manual" });
+    const { caseId } = await Case.create({ name, email, phone: phone || "N/A", subject: subject || "Manual Ticket", message, source: "crm_manual", created_by: req.user.id });
     res.status(201).json({ ok: true, caseId });
   } catch (err) {
     console.error(err);
@@ -143,6 +153,7 @@ exports.getCase = async (req, res) => {
   try {
     const c = await Case.findByCaseId(req.params.caseId);
     if (!c) return res.status(404).json({ error: "Case not found" });
+    if (!canAccessCase(req.user, c)) return res.status(403).json({ error: "Access denied: you can only view your own tickets" });
     const notes = await Case.notes(c.id);
     res.json({ ...c, notes });
   } catch (err) {
@@ -154,6 +165,7 @@ exports.closeCase = async (req, res) => {
   try {
     const c = await Case.findByCaseId(req.params.caseId);
     if (!c) return res.status(404).json({ error: "Not found" });
+    if (!canAccessCase(req.user, c)) return res.status(403).json({ error: "Access denied" });
     const oldStatus = c.status;
     await Case.updateStatus(c.id, "closed");
     await AuditLog.record({ caseId: c.id, userId: req.user.id, action: "status_change", oldStatus, newStatus: "closed" });
@@ -167,6 +179,7 @@ exports.reopenCase = async (req, res) => {
   try {
     const c = await Case.findByCaseId(req.params.caseId);
     if (!c) return res.status(404).json({ error: "Not found" });
+    if (!canAccessCase(req.user, c)) return res.status(403).json({ error: "Access denied" });
     const oldStatus = c.status;
     await Case.updateStatus(c.id, "reopened");
     await AuditLog.record({ caseId: c.id, userId: req.user.id, action: "status_change", oldStatus, newStatus: "reopened" });
@@ -193,6 +206,7 @@ exports.updatePriority = async (req, res) => {
   try {
     const c = await Case.findByCaseId(req.params.caseId);
     if (!c) return res.status(404).json({ error: "Not found" });
+    if (!canAccessCase(req.user, c)) return res.status(403).json({ error: "Access denied" });
     const { priority } = req.body;
     if (!["low", "medium", "high", "urgent"].includes(priority)) {
       return res.status(400).json({ error: "Priority must be low, medium, high, or urgent" });
@@ -211,6 +225,7 @@ exports.markInProgress = async (req, res) => {
   try {
     const c = await Case.findByCaseId(req.params.caseId);
     if (!c) return res.status(404).json({ error: "Not found" });
+    if (!canAccessCase(req.user, c)) return res.status(403).json({ error: "Access denied" });
     const oldStatus = c.status;
     await Case.updateStatus(c.id, "in_progress");
     await AuditLog.record({ caseId: c.id, userId: req.user.id, action: "status_change", oldStatus, newStatus: "in_progress" });
@@ -224,6 +239,7 @@ exports.addNote = async (req, res) => {
   try {
     const c = await Case.findByCaseId(req.params.caseId);
     if (!c) return res.status(404).json({ error: "Not found" });
+    if (!canAccessCase(req.user, c)) return res.status(403).json({ error: "Access denied" });
     if (!req.body.note) return res.status(400).json({ error: "note required" });
     await Case.addNote(c.id, req.user.id, req.body.note);
     res.json({ ok: true });
@@ -232,9 +248,10 @@ exports.addNote = async (req, res) => {
   }
 };
 
-exports.stats = async (_req, res) => {
+exports.stats = async (req, res) => {
   try {
-    const data = await Case.stats();
+    const visibleToUserId = isAdminPlus(req.user) ? undefined : req.user.id;
+    const data = await Case.stats(visibleToUserId);
     res.json(data);
   } catch (err) {
     res.status(500).json({ error: "Server error" });
@@ -245,6 +262,7 @@ exports.getAuditLog = async (req, res) => {
   try {
     const c = await Case.findByCaseId(req.params.caseId);
     if (!c) return res.status(404).json({ error: "Not found" });
+    if (!canAccessCase(req.user, c)) return res.status(403).json({ error: "Access denied" });
     const logs = await AuditLog.forCase(c.id);
     res.json({ logs });
   } catch (err) {
@@ -266,6 +284,7 @@ exports.markOpen = async (req, res) => {
   try {
     const c = await Case.findByCaseId(req.params.caseId);
     if (!c) return res.status(404).json({ error: "Not found" });
+    if (!canAccessCase(req.user, c)) return res.status(403).json({ error: "Access denied" });
     const oldStatus = c.status;
     await Case.updateStatus(c.id, "open");
     await AuditLog.record({ caseId: c.id, userId: req.user.id, action: "status_change", oldStatus, newStatus: "open" });

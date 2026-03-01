@@ -10,15 +10,15 @@ function generateCaseId() {
 }
 
 const Case = {
-  async create({ name, email, phone, subject, message, customer_id, source, priority }) {
+  async create({ name, email, phone, subject, message, customer_id, source, priority, created_by }) {
     const conn = await db.getConnection();
     try {
       await conn.beginTransaction();
       const tempCaseId = "TEMP";
       const [result] = await conn.query(
-        `INSERT INTO cases (case_id, name, email, phone, subject, message, customer_id, source, priority)
-         VALUES (?,?,?,?,?,?,?,?,?)`,
-        [tempCaseId, name, email, phone, subject, message, customer_id || null, source || "contact_form", priority || "medium"]
+        `INSERT INTO cases (case_id, name, email, phone, subject, message, customer_id, source, priority, created_by)
+         VALUES (?,?,?,?,?,?,?,?,?,?)`,
+        [tempCaseId, name, email, phone, subject, message, customer_id || null, source || "contact_form", priority || "medium", created_by || null]
       );
       const dbId = result.insertId;
       const serialNumber = 100000000 + dbId;
@@ -51,10 +51,15 @@ const Case = {
     );
     return rows[0] || null;
   },
-  async listAll({ status, search, page = 1, limit = 50, assigned_to, date_from, date_to }) {
+  async listAll({ status, search, page = 1, limit = 50, assigned_to, date_from, date_to, visibleToUserId }) {
     const offset = (page - 1) * limit;
     const conditions = [];
     const params = [];
+    // Visibility filter for normal users: only own tickets (created_by OR assigned_to)
+    if (visibleToUserId) {
+      conditions.push("(c.created_by = ? OR c.assigned_to = ?)");
+      params.push(visibleToUserId, visibleToUserId);
+    }
     if (status) { conditions.push("c.status = ?"); params.push(status); }
     if (assigned_to) { conditions.push("c.assigned_to = ?"); params.push(assigned_to); }
     if (date_from) { conditions.push("c.created_at >= ?"); params.push(date_from); }
@@ -102,7 +107,14 @@ const Case = {
       [caseId, userId, note]
     );
   },
-  async stats() {
+  async stats(visibleToUserId) {
+    const conditions = [];
+    const params = [];
+    if (visibleToUserId) {
+      conditions.push("(created_by = ? OR assigned_to = ?)");
+      params.push(visibleToUserId, visibleToUserId);
+    }
+    const where = conditions.length ? "WHERE " + conditions.join(" AND ") : "";
     const [rows] = await db.query(
       `SELECT
          COUNT(*) as total,
@@ -115,7 +127,8 @@ const Case = {
          SUM(priority='medium')    as medium,
          SUM(priority='low')       as low,
          SUM(DATE(created_at) = CURDATE()) as today
-       FROM cases`
+       FROM cases ${where}`,
+      params
     );
     // Also get active users count
     const [[{ active_users }]] = await db.query(

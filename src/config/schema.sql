@@ -87,6 +87,7 @@ CREATE TABLE IF NOT EXISTS cases (
   priority     ENUM('low','medium','high','urgent') NOT NULL DEFAULT 'medium',
   source       ENUM('contact_form','manual','crm_manual') NOT NULL DEFAULT 'contact_form',
   assigned_to  INT UNSIGNED NULL,
+  created_by   INT UNSIGNED NULL,
   closed_at    DATETIME     NULL,
   created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -95,9 +96,11 @@ CREATE TABLE IF NOT EXISTS cases (
   KEY idx_status  (status),
   KEY idx_priority (priority),
   KEY idx_assigned (assigned_to),
+  KEY idx_created_by (created_by),
   KEY idx_customer (customer_id),
   FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL,
-  FOREIGN KEY (assigned_to) REFERENCES users(id)     ON DELETE SET NULL
+  FOREIGN KEY (assigned_to) REFERENCES users(id)     ON DELETE SET NULL,
+  FOREIGN KEY (created_by)  REFERENCES users(id)     ON DELETE SET NULL
 ) ENGINE=InnoDB AUTO_INCREMENT=1;
 
 -- ─── CASE NOTES / TIMELINE ───────────────────────────────────────────────────
