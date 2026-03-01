@@ -320,6 +320,13 @@ exports.logout = async (req, res) => {
       }
     }
 
+    // Record logout in login_logs
+    if (req.user?.id) {
+      const ip  = getIp(req);
+      const geo = getGeo(ip);
+      await LoginLog.record({ userId: req.user.id, ip, userAgent: req.headers["user-agent"], geo, status: "logout" });
+    }
+
     await logSecurityEvent("logout", req, { userId: req.user?.id, email: req.user?.email });
 
     // Clear both cookies

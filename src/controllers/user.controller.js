@@ -300,9 +300,32 @@ exports.forceLogout = async (req, res) => {
 
 exports.getLoginLogs = async (req, res) => {
   try {
-    const logs = await LoginLog.all(parseInt(req.query.limit) || 100);
+    const logs = await LoginLog.all(parseInt(req.query.limit) || 500);
     res.json({ logs });
   } catch (err) {
+    res.status(500).json({ error: "Server error" });
+  }
+};
+
+/** Super Admin only: get user summary for Logs page */
+exports.getLogsSummary = async (req, res) => {
+  try {
+    const summary = await LoginLog.userSummary();
+    res.json({ summary });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+};
+
+/** Super Admin only: get detailed logs for a specific user */
+exports.getUserLogs = async (req, res) => {
+  try {
+    const logs = await LoginLog.forUser(parseInt(req.params.id), parseInt(req.query.limit) || 200);
+    const user = await User.findById(parseInt(req.params.id));
+    res.json({ logs, user: user ? { id: user.id, name: user.name, email: user.email, role: user.role } : null });
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ error: "Server error" });
   }
 };

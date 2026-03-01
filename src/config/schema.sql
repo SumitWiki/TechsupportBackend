@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS login_logs (
   country    VARCHAR(100) NULL,
   region     VARCHAR(100) NULL,
   city       VARCHAR(100) NULL,
-  status     ENUM('success','failed') NOT NULL DEFAULT 'success',
+  status     ENUM('success','failed','logout') NOT NULL DEFAULT 'success',
   logged_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;

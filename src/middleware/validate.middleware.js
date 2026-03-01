@@ -54,7 +54,7 @@ const createUserRules = [
     .withMessage("Password: min 8 chars, 1 uppercase, 1 number, 1 special char"),
   body("role")
     .optional()
-    .isIn(["super_admin", "admin", "super_user", "simple_user"])
+    .isIn(["super_admin", "admin", "user"])
     .withMessage("Invalid role"),
   validate,
 ];
