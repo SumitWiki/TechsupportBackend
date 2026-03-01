@@ -45,4 +45,38 @@ async function sendMail({ to, subject, html, text }) {
   });
 }
 
-module.exports = { sendMail, isConfigured };
+/* ═══════════════════════════════════════════════════════════
+   CUSTOMER SMTP — separate config for Customer → Send Email
+   Falls back to system SMTP if CUSTOMER_SMTP vars not set.
+   ═══════════════════════════════════════════════════════════ */
+const custSmtpPort = parseInt(process.env.CUSTOMER_SMTP_PORT) || 587;
+
+const customerTransporter = nodemailer.createTransport({
+  host:   process.env.CUSTOMER_SMTP_HOST || process.env.SMTP_HOST || "smtp.gmail.com",
+  port:   custSmtpPort,
+  secure: custSmtpPort === 465,
+  auth: {
+    user: process.env.CUSTOMER_SMTP_USER || process.env.SMTP_USER,
+    pass: process.env.CUSTOMER_SMTP_PASS || process.env.SMTP_PASS,
+  },
+});
+
+const isCustomerMailConfigured =
+  (process.env.CUSTOMER_SMTP_USER || process.env.SMTP_USER) &&
+  (process.env.CUSTOMER_SMTP_PASS || process.env.SMTP_PASS);
+
+function getCustomerFrom() {
+  if (process.env.CUSTOMER_EMAIL_FROM) return process.env.CUSTOMER_EMAIL_FROM;
+  if (process.env.CUSTOMER_SMTP_USER)  return `"TechSupport4" <${process.env.CUSTOMER_SMTP_USER}>`;
+  return getFrom();
+}
+
+async function sendCustomerMail({ to, subject, html, text }) {
+  if (!isCustomerMailConfigured) {
+    console.log(`[CUST-MAIL-SKIP] Would send to ${to}: ${subject}`);
+    return { skipped: true };
+  }
+  return customerTransporter.sendMail({ from: getCustomerFrom(), to, subject, html, text });
+}
+
+module.exports = { sendMail, isConfigured, sendCustomerMail, isCustomerMailConfigured };
