@@ -121,14 +121,25 @@ exports.login = async (req, res) => {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    // Generate 6-digit OTP
-    const otp = generateOtp(6);
-    const expiresAt = new Date(Date.now() + (parseInt(process.env.OTP_EXPIRY_MINUTES) || 10) * 60 * 1000)
-      .toISOString()
-      .slice(0, 19)
-      .replace("T", " ");
+    const otpExpiryMinutes = parseInt(process.env.OTP_EXPIRY_MINUTES) || 10;
 
-    await OtpCode.create(user.id, otp, expiresAt);
+    // Check for an existing active (unused + not expired) OTP
+    const activeOtp = await OtpCode.findActive(user.id);
+
+    let otpToSend;
+    if (activeOtp) {
+      // Reuse the existing OTP — do NOT generate a new one
+      otpToSend = activeOtp.otp;
+      await OtpCode.updateLastSent(activeOtp.id);
+    } else {
+      // No active OTP — generate a fresh one
+      otpToSend = generateOtp(6);
+      const expiresAt = new Date(Date.now() + otpExpiryMinutes * 60 * 1000)
+        .toISOString()
+        .slice(0, 19)
+        .replace("T", " ");
+      await OtpCode.create(user.id, otpToSend, expiresAt);
+    }
 
     try {
       await sendMail({
@@ -139,8 +150,8 @@ exports.login = async (req, res) => {
             <h2 style="color:#1e40af">Login Verification</h2>
             <p>Hi <strong>${esc(user.name)}</strong>,</p>
             <p>Your one-time login code is:</p>
-            <div style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#1e40af;padding:16px 0">${otp}</div>
-            <p style="color:#64748b;font-size:13px">This code expires in ${process.env.OTP_EXPIRY_MINUTES || 10} minutes. Do not share it with anyone.</p>
+            <div style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#1e40af;padding:16px 0">${otpToSend}</div>
+            <p style="color:#64748b;font-size:13px">This code expires in ${otpExpiryMinutes} minutes. Do not share it with anyone.</p>
             <hr/>
             <p style="font-size:12px;color:#94a3b8">If you did not attempt to log in, please contact support immediately.</p>
           </div>
@@ -153,6 +164,92 @@ exports.login = async (req, res) => {
     return res.json({ message: "OTP sent to your email", userId: user.id });
   } catch (err) {
     logger.error("login error", { error: err.message, stack: err.stack });
+    res.status(500).json({ error: "Server error" });
+  }
+};
+
+// ── RESEND OTP (reuses existing OTP if still valid, 60s cooldown) ───────────
+exports.resendOtp = async (req, res) => {
+  try {
+    const { userId } = req.body;
+    if (!userId) return res.status(400).json({ error: "userId required" });
+
+    const user = await User.findById(userId);
+    if (!user) return res.status(400).json({ error: "User not found" });
+    if (!user.is_active) return res.status(401).json({ error: "Account is disabled" });
+
+    const otpExpiryMinutes = parseInt(process.env.OTP_EXPIRY_MINUTES) || 10;
+
+    // Look for an active OTP
+    const activeOtp = await OtpCode.findActive(userId);
+
+    if (!activeOtp) {
+      // No active OTP — generate a fresh one
+      const newOtp = generateOtp(6);
+      const expiresAt = new Date(Date.now() + otpExpiryMinutes * 60 * 1000)
+        .toISOString()
+        .slice(0, 19)
+        .replace("T", " ");
+      await OtpCode.create(userId, newOtp, expiresAt);
+
+      try {
+        await sendMail({
+          to: user.email,
+          subject: "TechSupport4 CRM — Your Login OTP",
+          html: `
+            <div style="font-family:sans-serif;max-width:480px;margin:auto">
+              <h2 style="color:#1e40af">Login Verification</h2>
+              <p>Hi <strong>${esc(user.name)}</strong>,</p>
+              <p>Your one-time login code is:</p>
+              <div style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#1e40af;padding:16px 0">${newOtp}</div>
+              <p style="color:#64748b;font-size:13px">This code expires in ${otpExpiryMinutes} minutes. Do not share it with anyone.</p>
+              <hr/>
+              <p style="font-size:12px;color:#94a3b8">If you did not attempt to log in, please contact support immediately.</p>
+            </div>
+          `,
+        });
+      } catch (mailErr) {
+        logger.error("OTP email failed (SMTP error)", { error: mailErr.message, userId: user.id });
+      }
+
+      return res.json({ message: "New OTP sent to your email" });
+    }
+
+    // Active OTP exists — check 60s cooldown
+    const { canResend, waitSeconds } = OtpCode.checkResendCooldown(activeOtp);
+    if (!canResend) {
+      return res.status(429).json({
+        error: `Please wait ${waitSeconds} seconds before requesting another OTP`,
+        waitSeconds,
+      });
+    }
+
+    // Cooldown passed — resend the SAME OTP
+    await OtpCode.updateLastSent(activeOtp.id);
+
+    try {
+      await sendMail({
+        to: user.email,
+        subject: "TechSupport4 CRM — Your Login OTP",
+        html: `
+          <div style="font-family:sans-serif;max-width:480px;margin:auto">
+            <h2 style="color:#1e40af">Login Verification</h2>
+            <p>Hi <strong>${esc(user.name)}</strong>,</p>
+            <p>Your one-time login code is:</p>
+            <div style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#1e40af;padding:16px 0">${activeOtp.otp}</div>
+            <p style="color:#64748b;font-size:13px">This code expires in ${otpExpiryMinutes} minutes. Do not share it with anyone.</p>
+            <hr/>
+            <p style="font-size:12px;color:#94a3b8">If you did not attempt to log in, please contact support immediately.</p>
+          </div>
+        `,
+      });
+    } catch (mailErr) {
+      logger.error("OTP email failed (SMTP error)", { error: mailErr.message, userId: user.id });
+    }
+
+    return res.json({ message: "OTP resent to your email" });
+  } catch (err) {
+    logger.error("resendOtp error", { error: err.message, stack: err.stack });
     res.status(500).json({ error: "Server error" });
   }
 };

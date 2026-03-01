@@ -23,12 +23,13 @@ CREATE TABLE IF NOT EXISTS users (
 
 -- ─── OTP CODES (email-based 2FA) ─────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS otp_codes (
-  id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  user_id    INT UNSIGNED NOT NULL,
-  otp        VARCHAR(10)  NOT NULL,
-  expires_at DATETIME     NOT NULL,
-  used       TINYINT(1)   NOT NULL DEFAULT 0,
-  created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  id           INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  user_id      INT UNSIGNED NOT NULL,
+  otp          VARCHAR(10)  NOT NULL,
+  expires_at   DATETIME     NOT NULL,
+  used         TINYINT(1)   NOT NULL DEFAULT 0,
+  last_sent_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   KEY idx_otp_lookup (user_id, used, expires_at)
 ) ENGINE=InnoDB;

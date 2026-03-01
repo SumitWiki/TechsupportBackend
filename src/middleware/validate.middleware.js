@@ -34,6 +34,11 @@ const otpRules = [
   validate,
 ];
 
+const resendOtpRules = [
+  body("userId").isInt({ min: 1 }).withMessage("Valid userId required"),
+  validate,
+];
+
 /* ─── Case validators ─── */
 const contactFormRules = [
   body("name").trim().isLength({ min: 1, max: 150 }).escape().withMessage("Name required (max 150 chars)"),
@@ -100,6 +105,7 @@ module.exports = {
   validate,
   loginRules,
   otpRules,
+  resendOtpRules,
   contactFormRules,
   createUserRules,
   changePasswordRules,

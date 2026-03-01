@@ -2,6 +2,8 @@ const Customer       = require("../models/Customer");
 const EmailLog       = require("../models/EmailLog");
 const CustomerNote   = require("../models/CustomerNote");
 const DeleteApproval = require("../models/DeleteApproval");
+const Notification   = require("../models/Notification");
+const User           = require("../models/User");
 const { sendCustomerMail, buildCustomerEmailTemplate } = require("../config/mailer");
 const { isSuperAdmin } = require("../middleware/role.middleware");
 
@@ -88,6 +90,23 @@ exports.deleteCustomer = async (req, res) => {
       target_name:  c.name,
       reason:       req.body?.reason || null,
     });
+
+    // Notify all super admins
+    try {
+      const allUsers = await User.findAll();
+      const superAdminIds = allUsers.filter((u) => isSuperAdmin(u)).map((u) => u.id);
+      if (superAdminIds.length > 0) {
+        await Notification.broadcast({
+          user_ids: superAdminIds,
+          type:     "delete_request",
+          title:    `Delete request: Customer "${c.name}"`,
+          message:  `${req.user.name || "A user"} requested to delete customer "${c.name}". Review in Approvals.`,
+          link:     "/admin/dashboard?tab=approvals",
+        });
+      }
+    } catch (notifErr) {
+      console.error("Failed to send delete-request notification:", notifErr.message);
+    }
 
     res.json({ ok: true, pending: true, message: "Delete request sent to Super Admin for approval" });
   } catch (err) {

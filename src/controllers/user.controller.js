@@ -1,8 +1,10 @@
-const bcrypt   = require("bcryptjs");
-const crypto   = require("crypto");
-const User     = require("../models/User");
-const LoginLog = require("../models/LoginLog");
-const { sendMail } = require("../config/mailer");
+const bcrypt         = require("bcryptjs");
+const crypto         = require("crypto");
+const User           = require("../models/User");
+const LoginLog       = require("../models/LoginLog");
+const DeleteApproval = require("../models/DeleteApproval");
+const Notification   = require("../models/Notification");
+const { sendMail }   = require("../config/mailer");
 const { isSuperAdmin, SUPER_ADMIN_EMAIL, VALID_ROLES, ROLE_LEVEL, roleLevel } = require("../middleware/role.middleware");
 
 exports.listUsers = async (_req, res) => {
@@ -351,8 +353,44 @@ exports.deleteUser = async (req, res) => {
       return res.status(403).json({ error: "Only Super Admin can delete Admin accounts" });
     }
 
-    await User.delete(id);
-    res.json({ ok: true });
+    // Super admin → delete immediately
+    if (isSuperAdmin(req.user)) {
+      await User.delete(id);
+      return res.json({ ok: true, message: "User deleted" });
+    }
+
+    // Others → create approval request
+    const alreadyPending = await DeleteApproval.hasPending("user", id);
+    if (alreadyPending) {
+      return res.status(409).json({ error: "Delete request already pending approval" });
+    }
+
+    await DeleteApproval.create({
+      requested_by: req.user.id,
+      target_type:  "user",
+      target_id:    id,
+      target_name:  targetUser.name,
+      reason:       req.body?.reason || null,
+    });
+
+    // Notify all super admins
+    try {
+      const allUsers = await User.findAll();
+      const superAdminIds = allUsers.filter((u) => isSuperAdmin(u)).map((u) => u.id);
+      if (superAdminIds.length > 0) {
+        await Notification.broadcast({
+          user_ids: superAdminIds,
+          type:     "delete_request",
+          title:    `Delete request: User "${targetUser.name}"`,
+          message:  `${req.user.name || "A user"} requested to delete user "${targetUser.name}". Review in Approvals.`,
+          link:     "/admin/dashboard?tab=approvals",
+        });
+      }
+    } catch (notifErr) {
+      console.error("Failed to send delete-request notification:", notifErr.message);
+    }
+
+    res.json({ ok: true, pending: true, message: "Delete request sent to Super Admin for approval" });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Server error" });
