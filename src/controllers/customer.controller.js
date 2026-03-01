@@ -2,7 +2,7 @@ const Customer       = require("../models/Customer");
 const EmailLog       = require("../models/EmailLog");
 const CustomerNote   = require("../models/CustomerNote");
 const DeleteApproval = require("../models/DeleteApproval");
-const { sendCustomerMail } = require("../config/mailer");
+const { sendCustomerMail, buildCustomerEmailTemplate } = require("../config/mailer");
 const { isSuperAdmin } = require("../middleware/role.middleware");
 
 exports.addCustomer = async (req, res) => {
@@ -127,7 +127,10 @@ exports.sendCustomerEmail = async (req, res) => {
     if (!subject || !body) return res.status(400).json({ error: "subject and body are required" });
 
     try {
-      await sendCustomerMail({ to: c.email, subject, html: body, text: body.replace(/<[^>]*>/g, "") });
+      // Wrap body in professional branded email template
+      const html = buildCustomerEmailTemplate({ customerName: c.name, subject, bodyHtml: body });
+      const text = body.replace(/<[^>]*>/g, "");
+      await sendCustomerMail({ to: c.email, subject, html, text });
       // Log success
       await EmailLog.create({
         customer_id: c.id,
